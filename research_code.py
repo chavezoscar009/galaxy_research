@@ -4,9 +4,12 @@ import pylab as plt
 import glob as glob
 from scipy.stats import mode
 from matplotlib.colors import LogNorm
+from specutils import get_wcs_solution
 
+#grabbing all the fits files form the current directory
 files = [x for x in glob.glob('*.fits')]
 
+#gettting only good file by getting rid of my box_data.fits file
 good_files = files[1:]
 '''
     This is some code that worked before and in case the new version of finding the row index does not work iI have this backup
@@ -38,18 +41,23 @@ good_files = files[1:]
         row.append(i)
 '''
 
-def fitting_gaussian(data):
+def fitting_gaussian(data, x):
+    
     '''
     This function will find the gaussian fit to the column data after it is boxed. Meaning we know where the center of the
     spectrum is at and we added plus or minus 50, in our case to it. Then make a spectrum from it by finding the maximum.
 
     Parameter
     -------------
-    data: this is the boxed data that is passed in.
+    data: this is the data that we would like to fit with a gaussian model. This could be anything from emission lines to columns of the boxed
+          data sets.
+    
+    x: this is the x values that will be fitted with the gaussian
 
     Output
     -------------
-    spec_1D_gauss: A 1D spectrum using the gaussian method
+        
+    
     '''
     
     def f (x, A, x0, sigma):
@@ -58,30 +66,17 @@ def fitting_gaussian(data):
         Making a Gaussian Function to fit the columns using curve_fit
         '''
         
-        return A * np.exp(-(x-x0)**2/(2*sigma)**2)
+        return A * np.exp(-(x-x0)**2/(2*sigma**2))
     
-    #making a list to gather all of the max values of the fitted gaussians
-    max_gaussian = []
     
-    x = range(len(data[:,0]))
-    #fitting columns to gaussians for every column
-    for i in range(len(x)):
-
-        col = data[:, i]
-        
-        popt, covar = curve_fit(f, x, col, p0 = (1, x[len(x)//2], 1))
-
-        y = f(x, *popt)
-
-        max_gaussian.append(np.amax(y))
+    #here is the fitting of the data and x values to the gaussian and gives us the optimal paramters of A, x0, sigma 
+    popt, covar = curve_fit(f, x, data)
     
-    #plt.figure(
+    #this part makes the gaussian function with the parameters fit from above
+    y = f(x, *popt)
+    
+    #plt.figure()
     #plt.plot(x, y)    
-
-
-
-
-
 
 def finding_row_center(data):
     
@@ -134,13 +129,18 @@ def spectrum(file):
     #gathering the data from the fits file we pass in
     data = fits.getdata(file)
     
+    #getting the header information here as this will be used below in the code to calculate the wavelength array
+    hdr = fits.getheader(file)
+
     '''
     #this is the cutting of the array were we get rid of the edges on all sides
     row_min = len(data[:,0])//3
     row_max = len(data[:,0]) - row_min
     column_min = len(data[0,:])//3
     column_max = len(data[0,:])-column_min
+    
     '''
+    
     ###############################
     #code below will try to determine what would be the appropriate boxing for the data
     ###############################
@@ -186,8 +186,8 @@ def spectrum(file):
     #This one calculates where in the original data array the correct row_index corresponding to the center of the spectrum lies
     #We used a function called finding_row_center to find the index of the simplified data and add it to the respective row_min
     row_spectrum = row_min + finding_row_center(cut_data)
-    
-    window = 50
+
+    window = 30
     
     #given the row where spectrum is at we are looking at 50 rows above and below it
     boxed_data = data[row_spectrum - window : row_spectrum + window ,:]
@@ -206,13 +206,36 @@ def spectrum(file):
     #for i, val in enumerate(max_values_col):
         #if val > 100:
          #   max_values_col[i] = 0
+    
+    #getting the polynomial that will map (x,y) pixels to wavelength in angstrom, assigningthis polynomial to p
+    p = get_wcs_solution(hdr)
+    
+    #making the x and y data that I will pass into the polynomial
+    x = range(len(data[row_spectrum, :]))
+    y = row_spectrum * np.ones(len(x))
+
+    wavelength = p(x, y)
 
     #code that plots it so that i can see what the 1D spectrum looks like
-    plt.figure(figsize = (14,8))
-    plt.plot(range(len(data[0,:])), spectrum)
+    fig = plt.figure(figsize = (14,8))
+    
+    ax1 = fig.add_subplot(211)
+    ax2 = fig.add_subplot(212, sharex = ax1)
+
+    ax1.set_title('Graph of Spectrum using Summation ')
+    ax1.set_ylabel('Intensity')
+    ax1.plot(wavelength, spectrum)
+    
+    ax2.set_title('Graph of the Spectrum using Max Column Values')
+    ax2.set_ylabel('Intensity')
+    ax2.set_xlabel(r'Wavelength [$\AA$]')
+    ax2.plot(wavelength, max_values_col)
+    
+    fig.tight_layout()
+
     plt.show()
 
-    return spectrum
+    return spectrum, max_values_col
 
 
 for i in good_files:
