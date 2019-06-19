@@ -5,12 +5,25 @@ import glob as glob
 from scipy.stats import mode
 from matplotlib.colors import LogNorm
 from specutils import get_wcs_solution
+from scipy.interpolate import interp1d
+import matplotlib.gridspec as gridspec
 
-#grabbing all the fits files form the current directory
-files = [x for x in glob.glob('*.fits')]
+
+#grabbing all of micaela's fits files from the current directory
+files = [x for x in glob.glob('*.fits') if 'SDSS' not in x]
+
+#getting all the sdss fits files so we can do flux calibration
+sdss_files = [x for x in glob.glob('*.fits') if 'SDSS' in x]
 
 #gettting only good file by getting rid of my box_data.fits file
-good_files = files[1:]
+#good_files = files[1:]
+
+#reading in the dat file
+ID, redshift = np.genfromtxt('targets.dat', usecols=(0,1), unpack = True, skip_header=2, dtype = 'str')
+
+z = redshift.astype(float)
+
+
 '''
     This is some code that worked before and in case the new version of finding the row index does not work iI have this backup
 
@@ -149,51 +162,119 @@ def spectrum(file):
     x = file.split('_')
     
     #making the column_mins and max values as this will be true for all the files
-    column_min = 500
-    column_max = 3720
+    #column_min = 500
+    #column_max = 3720
     
-    #this one goes and checks the len of the split file and if its 3 then assigns one row_min and row_max
-    #if the array is length of 4 then wit further splits it into red and blue components and assigns 
-    #appropriate row_min and row_max value. These were found by using ds9 and were pik as to not include the slit
+    #This code here checks the filename and if the file has the following things it assigns to them the appropriate row_min and row_max
+    #These were found by using ds9 and were picked so as to not include the slits
     
-    if len(x) ==3:
-
+    filt = np.ones(data.shape)
+    
+    if '_cem.fits' in file:
+            
         row_min = 220
         row_max = 500
+        
+        filt[:row_min, :] = np.zeros(len(data[0,:]))
+        filt[row_max:, :] = np.zeros(len(data[0,:]))
+ 
+    
+    if 'b_ce.fits' in file:
 
-    elif len(x) == 4:
+        row_min = 1410
+        row_max = 1890
 
-        if x[2][-1] == 'b':
+        filt[:row_min, :] = np.zeros(len(data[0,:]))
+        filt[row_max:, :] = np.zeros(len(data[0,:]))
+    
+    if 'r_ce.fits' in file:
 
-            row_min = 1410
-            row_max = 1890
+        row_min = 1350
+        row_max = 1800
 
-        if x[2][-1] == 'r':
-
-            row_min = 1350
-            row_max = 1800
-
+        filt[:row_min, :] = np.zeros(len(data[0,:]))
+        filt[row_max:, :] = np.zeros(len(data[0,:]))
+    
+    
+    #plt.figure(figsize = (10,10))
+    #plt.imshow(filt*data, cmap = 'gray', origin = 'lower', norm = LogNorm())
+    #plt.show()
+    
 
     #declaring the cut_data array below, which is a simplified version of the data gathered above. It should only
     #contain the spectrum with a box excluding any slit effects
-    cut_data = data[row_min:row_max, column_min:column_max] 
+    #cut_data = data[row_min:row_max, column_min:column_max] 
     
     #plt.figure(figsize = (14, 8))
     #plt.imshow(cut_data, origin = 'lower', cmap = 'gray',norm = LogNorm())
     #plt.show()
     
-
+    
     #This one calculates where in the original data array the correct row_index corresponding to the center of the spectrum lies
     #We used a function called finding_row_center to find the index of the simplified data and add it to the respective row_min
-    row_spectrum = row_min + finding_row_center(cut_data)
+    row_spectrum = finding_row_center(data*filt)
 
-    window = 30
+    window = 50
     
     #given the row where spectrum is at we are looking at 50 rows above and below it
     boxed_data = data[row_spectrum - window : row_spectrum + window ,:]
     
+    p = get_wcs_solution(hdr)
+    
+    X, Y = np.meshgrid(range(len(data[0,:])), range(len(data[:,0])))
+
+    wvln_arr = p(X, Y)
+
+    boxed_wvln_array = wvln_arr[row_spectrum - window: row_spectrum + window,:]
+    
+    x = range(len(data[0,:]))
+    y = row_spectrum * np.ones(len(x))
+
+    #plt.figure(figsize = (10,10))
+    #plt.imshow(filt*data, cmap = 'gray', origin = 'lower', norm = LogNorm())
+    #plt.plot(x, y)
+    #plt.show()
+
+    adding_target = 0
+    N = 0
+    wvln_spec = wvln_arr[row_spectrum,:]
+    
+
+    for i in range(len(boxed_data[:,0])):
+        
+        f = interp1d(boxed_wvln_array[i,:], boxed_data[i,:])
+        adding_target += f(wvln_spec)
+        N += 1
+    
+    
+    target_spec_avg = adding_target/N
+    
+    
+    fig = plt.figure(figsize = (14,10), constrained_layout = True)
+    spec = gridspec.GridSpec(ncols=2, nrows=2,figure = fig)
+
+    ax1 = fig.add_subplot(spec[0,0])
+    ax2 = fig.add_subplot(spec[-1, 0], sharex = ax1)
+    ax3 = fig.add_subplot(spec[:, 1])
+
+    ax1.plot(wvln_spec, adding_target)
+    ax2.plot(wvln_spec, target_spec_avg)
+    
+    ax1.set_title('Not Averaged Spec')
+    ax2.set_title('Averaged Spec')
+
+    ax2.set_xlabel(r'Wavelength [$\AA$]')
+    
+    ax3.set_title(file)
+    ax3.imshow(filt*data, cmap = 'gray', origin = 'lower', norm = LogNorm())
+    ax3.plot(x, y)
+
+    #.legend(loc='best')
+    #fig.tight_layout()
+    plt.show()
+    
     #straight summin up the columns together
-    spectrum = np.sum(boxed_data, axis = 0)
+    #spectrum = np.sum(boxed_data, axis = 0)
     
 
     ############################
@@ -207,9 +288,19 @@ def spectrum(file):
         #if val > 100:
          #   max_values_col[i] = 0
     
+    '''    
+    x = range(len(data[0,:]))
+    y = row_spectrum * np.ones(len(x))
+
+    plt.figure(figsize = (10,10))
+    plt.imshow(data*filt, cmap = 'gray', origin = 'lower', norm=LogNorm())
+    plt.plot(x, y, 'r--')
+    plt.show()
+    
     #getting the polynomial that will map (x,y) pixels to wavelength in angstrom, assigningthis polynomial to p
     p = get_wcs_solution(hdr)
     
+
     #making the x and y data that I will pass into the polynomial
     x = range(len(data[row_spectrum, :]))
     y = row_spectrum * np.ones(len(x))
@@ -234,11 +325,13 @@ def spectrum(file):
     fig.tight_layout()
 
     plt.show()
+    
 
     return spectrum, max_values_col
+    
+    '''
 
-
-for i in good_files:
+for i in files[:2]:
     spectrum(i)
 
 '''
