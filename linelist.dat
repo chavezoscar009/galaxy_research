@@ -1,0 +1,75 @@
+wave    line    linestr
+# H
+# Balmer
+6562.8  Halpha  H$\alpha$
+4861.3  Hbeta   H$\beta$
+4340.5  Hg      H$\gamma$
+4101.7  Hd      H$\delta$
+3970.1  He      H$\epsilon$
+3889.1  Hz      H$\zeta$
+3835.4  Hn      H$\eta$
+3797.9  H10     H10
+# Paschen
+10049.4 P7      P7
+9546.0  P8      P8
+9229.0  P9      P9
+9014.9  P10     P10
+### He I
+4471.   HeI
+# Triplet lines
+3820.   HeI
+3889.   HeI
+4026.   HeI
+5876.   HeI
+7065.   HeI
+10830.  HeI
+# Singlet lines
+6678.   HeI
+4922.   HeI
+5016.   HeI
+3965.   HeI
+### He II
+4686    HeII_4-3    HeII$\lambda4686$
+# Pickering (n -> 4)
+10123   HeII_5-4    HeII$\lambda10123$
+6560    HeII_6-4    HeII$\lambda6560$
+5412    HeII_7-4    HeII$\lambda5411$
+4859    HeII_8-4    HeII$\lambda4859$
+4541    HeII_9-4    HeII$\lambda4541$
+4339    HeII_10-4   HeII$\lambda4339$
+# Pfund series (n -> 5)
+9344    HeII_8-5    HeII$\lambda9344$
+8236    HeII_9-5    HeII$\lambda8236$
+7178    HeII_10-5   HeII$\lambda7178$
+### [OI]
+5577.   [OI]5577
+6300.   [OI]6300
+6363.   [OI]6363
+### [OII]
+3725.   [OII]3725
+3727.   [OII]3727
+3869.   OII
+7320    OII
+7330    OII
+### [OIII]
+4363.   [OIII]4363
+4959.   [OIII]4959
+5007.   [OIII]5007
+### [NII]
+5755.   [NII]5755
+6548.   [NII]6548
+6583.   [NII]6583
+### [SII]
+6312.   [SII]6312
+6716.   [SII]6716
+6730.   [SII]6730
+### [NeIII]
+3868.   [NeIII]3868
+3970.   [NeIII]3970
+### [ArIII]
+7135    [ArIII]7135
+7751    [ArIII]7751
+### [ArIV]
+4711    [ArIV]4711
+4740    [ArIV]4740
+
