@@ -169,6 +169,19 @@ def fitting_gaussian(data, wavelength):
     
     return renorm_y
 
+def fitting_lines(spectrum, mu_guess, sig_guess=4):
+    
+    def f(x, A, mu, sig):
+        return A * np.exp(-(x-mu)**2/(2*sig**2))
+    
+    param, covar = curve_fit(f, spectrum.spectral_axis.value, spectrum.flux.value, p0 = [np.amax(spectrum.flux.value), mu_guess, sig_guess])
+    
+    #amp = param[0]
+    #mu = param[1]
+    #sig = param[-1]
+    
+    return param
+
 def finding_row_center(data):
     
     '''
@@ -475,9 +488,12 @@ def analysis(flux, wavelength, filt, emission_lines, z, continuum_func):
     
     Parameters
     -----------------
-    flux: This is the flux of the spectrum we will do our analysis for
+    flux: This is the flux of the spectrum we will do our analysis for needs to be centered at 0
     wavelength: The wavlength corresponding to the flux
     emission_lines: a list of emission lines to look for
+    z = redshift of the galaxy
+    continuum_func: this is the funciton that mmodels the continum and we need that for manual EW calculations
+    
     
     Output
     ------------------
@@ -489,10 +505,16 @@ def analysis(flux, wavelength, filt, emission_lines, z, continuum_func):
     
     '''
     
+    def f(x, A, mu, sig):
+        return A * np.exp(-(x-mu)**2/(2*sig**2))
+    
+    #converting wavelength info to the correct wavelength we do this so we can see which lines we see
     line_wave = emission_lines * (1+z)
     
+    #making our SPectrum1D object getting rid of the noise in the outer portion of the spectrum
     spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
     
+    #finding lines
     lines = find_lines_derivative(spectrum, flux_threshold=4)
     emission = lines[lines['line_type'] == 'emission']
     
@@ -514,30 +536,59 @@ def analysis(flux, wavelength, filt, emission_lines, z, continuum_func):
     e_width = []
     manual_ew = []
     line_f= []
-    
+    continuum_val = []
     #for loop that goes through each of the emission lines and does the necessary analysis
+    #plt.figure(figsize = (12, 6))
+    
+    
+    
     for i in emission['line_center']:
         
-        emission_lines.append(i)
-        lines_flux.append(line_flux(spectrum, SpectralRegion(i-window, i+window)))
-        e_width.append(equivalent_width(spectrum, regions=SpectralRegion(i-window, i+window), continuum=continuum_func(i)))
-        manual_ew.append(line_flux(spectrum, SpectralRegion(i-window, i+window))/continuum_func(i))
-        
         #fitting a gaussian to the data and extracting the line flux
+        
         sub_region = SpectralRegion(i - window, i + window)
         sub_spectrum = extract_region(spectrum, sub_region)
+        
+        emission_lines.append(i)
+        lines_flux.append(line_flux(sub_spectrum))
+        
+        #manual_ew.append(line_flux(spectrum, SpectralRegion(i-window, i+window))/continuum_func(i))
+    
+        par = fitting_lines(sub_spectrum, i.value)
+        
         param = estimate_line_parameters(sub_spectrum, models.Gaussian1D())
         g_init = models.Gaussian1D(amplitude=param.amplitude, mean=param.mean, stddev=param.stddev)
         g_fit = fit_lines(spectrum, g_init)
-        y_fit = g_fit(sub_spectrum.spectral_axis)
         
-        flux_line = np.sqrt(2*np.pi)*param.amplitude.value*param.stddev.value
+        x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
+        y_fit = g_fit(x)
+        y_curve = f(x.value, *par)
+        
+        #idx = (np.abs(sub_spectrum.spectral_axis.value - par[1])).argmin()
+        #wavelength_of_peak = sub_spectrum.spectral_axis[idx]
+
+        e_width.append(equivalent_width(sub_spectrum,
+                                        continuum=continuum_func(par[1]*u.angstrom)))
+        #print(continuum_func(par[1]*u.angstrom))
+        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom))
         
         line_f.append(flux_line)
+        continuum_val.append(continuum_func(par[1]*u.angstrom))
+        #plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, 'k-')
+        #plt.plot(x.value, y_fit, 'r--',alpha = .6, label = 'Specutils Fitting')
+        #plt.plot(x.value, y_curve, 'y--',alpha = .7, label = 'Curve Fit')
+        #plt.axvline(param.mean.value)
+        #plt.axvline(i.value, linestyle = '--', color='red')
+        #plt.legend(loc='best')
+        #plt.show()    
     
+    print('Emission Line -------- ew_spec --------- ew_manual --------- flux_spec -------- manual_flux --------- continuum val')
     for i in range(len(e_width)):
-        print(emission_lines[i].value, lines_flux[i].value, e_width[i].value, manual_ew[i].value, line_f[i])
-        
+        print('%9.2f ------ %9.2f ------ %9.2f ----- %9.2f ----- %9.2f ------ %9.2f' %(emission_lines[i].value, e_width[i].value, manual_ew[i].value, lines_flux[i].value, line_f[i], continuum_val[i].value))
+    print()    
+     #   print('-----')
+    #plt.show()    
     #returning the lists declared above
     #return emission_line, lines_flux, e_width
     
@@ -567,7 +618,7 @@ def smooth_function(spectrum, wavelength, window):
 #ax2 = fig.add_subplot(312)
 #ax3 = fig.add_subplot(313)
 
-for i in files[:3]:
+for i in files:
     
     if 'cem.fits' in i:
         
@@ -582,6 +633,8 @@ for i in files[:3]:
         spec, wvln = spectrum(i)
         
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        
+        print(i)
         analysis(spectra, wvln, filt, line_wavelength, z1, cont_func)
         
         #ax1.plot(wvln, spec, label = i)
@@ -598,6 +651,8 @@ for i in files[:3]:
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        
+        print(i)
         analysis(spectra, wvln, filt, line_wavelength, z1, cont_func)
         
         #ax2.plot(wvln, spec, label = i)
@@ -613,6 +668,8 @@ for i in files[:3]:
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        
+        print(i)
         analysis(spectra, wvln, filt, line_wavelength, z1, cont_func)
         
         #ax3.plot(wvln, spec, label = i)
