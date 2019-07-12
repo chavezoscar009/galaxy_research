@@ -480,7 +480,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
 
     return continuum_subtracted_spec, continuum_fit, filt_noise
 
-def analysis(flux, wavelength, filt, emission_lines, z, continuum_func):
+def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name):
     '''
     
     This function will take in a 1D extracted spectrum and the emission QTables gathered from the 
@@ -505,76 +505,117 @@ def analysis(flux, wavelength, filt, emission_lines, z, continuum_func):
     
     '''
     
+    #making a gaussian function so that i can use curve_fit later to fit emission lines
     def f(x, A, mu, sig):
         return A * np.exp(-(x-mu)**2/(2*sig**2))
     
-    #converting wavelength info to the correct wavelength we do this so we can see which lines we see
-    line_wave = emission_lines * (1+z)
-    
-    #making our SPectrum1D object getting rid of the noise in the outer portion of the spectrum
+    #making our Spectrum1D object getting rid of the noise in the outer portion of the spectrum
     spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
     
-    #finding lines
-    lines = find_lines_derivative(spectrum, flux_threshold=4)
+    #making a way to automatically check for emisison lines. For this I sort the data and then pick a percentile 
+    #from which anything above that will be considered an emission line.
+    
+    #NOTE: this percentile changes for different files
+    
+    #sorting the data
+    data = np.sort(flux[filt])
+    
+    #making the threshold for the flux to be above a percentile value
+    threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+    
+    #finding lines using specutils line_derivative function
+    lines = find_lines_derivative(spectrum, flux_threshold=threshold)
+    
+    #getting only the emission lines
     emission = lines[lines['line_type'] == 'emission']
     
-    #plt.figure(figsize=(10,10))
-    #plt.title('Checking Emission Lines')
-    #plt.plot(spectrum.spectral_axis, spectrum.flux)
-    
-    #for i in emission['line_center'].value:
-    #    plt.axvline(i)
-    
-    #plt.show()
-    
-    #making a window to look around the line center so that I can do some analysis
-    window = 15*u.angstrom
-    
     #making the lists so that I can append the analysis later
+    
+    #has the emission lines found by specutils
     emission_lines = []
+    
+    #finds the line center using scipy curve fit
+    emission_line_fit = []
+    
+    #has the line fluxes caluclated by specutils
     lines_flux = []
+    
+    #has equivalent widths calculated using specutils ew function
     e_width = []
+    
+    #this has the ew width from me calculating it myself
     manual_ew = []
+    
+    #this obtains the line flux calculated manually using sqrt(2 pi)*A*sigma
     line_f= []
+    
+    #this holds the value of the continuum at the peak of the emission line
     continuum_val = []
-    #for loop that goes through each of the emission lines and does the necessary analysis
+    
+    #for loop that goes through each of the emission lines and does flux and equivalent width analysis
     #plt.figure(figsize = (12, 6))
     
-    
-    
     for i in emission['line_center']:
+       
+        #making a window to look around the line center so that I can do some analysis using specutils
+        #as well as my own homemade functions
+        window = 15*u.angstrom
         
-        #fitting a gaussian to the data and extracting the line flux
-        
+        #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
         sub_region = SpectralRegion(i - window, i + window)
         sub_spectrum = extract_region(spectrum, sub_region)
         
-        emission_lines.append(i)
+        #calculating the emission line of the sub_region
         lines_flux.append(line_flux(sub_spectrum))
         
-        #manual_ew.append(line_flux(spectrum, SpectralRegion(i-window, i+window))/continuum_func(i))
-    
+        #appending the emission line center
+        emission_lines.append(i.value)
+        
+        #this calls a function which fits the sub region with a gaussian and we pass in the 
+        #emission center from specutils as an initial guess
         par = fitting_lines(sub_spectrum, i.value)
         
+        ###############
+        #using specutils tools to fit lines with gaussian
+        ###############
+        
+        #getting an initial guess on the Gaussian parameters
         param = estimate_line_parameters(sub_spectrum, models.Gaussian1D())
+        #making an intial guess of the gaussian
         g_init = models.Gaussian1D(amplitude=param.amplitude, mean=param.mean, stddev=param.stddev)
+        
+        #fitting the emession line to the gaussian using values from above
         g_fit = fit_lines(spectrum, g_init)
         
-        x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
-        y_fit = g_fit(x)
-        y_curve = f(x.value, *par)
+        #making an x and y array for plotting, Used this for debugging purposes and check quality
+        #of fit
+        #x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
+        #y_values from specutils fit
+        #y_fit = g_fit(x)
         
-        #idx = (np.abs(sub_spectrum.spectral_axis.value - par[1])).argmin()
-        #wavelength_of_peak = sub_spectrum.spectral_axis[idx]
+        #y_values from curve_fit fit
+        #y_curve = f(x.value, *par)
 
+        #getting the equivalent width of the subregion using specutils function
         e_width.append(equivalent_width(sub_spectrum,
                                         continuum=continuum_func(par[1]*u.angstrom)))
-        #print(continuum_func(par[1]*u.angstrom))
-        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
-        manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom))
         
+        #getting the flux of the line using scipy curve fit parameters
+        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        
+        #getting the equivalent width from flux calculation above
+        manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom).value)
+        
+        #getting the center of the emission peak from curve_fit and appending it
+        emission_line_fit.append(par[1])
+        
+        #appending the manual flux calculations
         line_f.append(flux_line)
+        
+        #appending the continuum value
         continuum_val.append(continuum_func(par[1]*u.angstrom))
+        
+        #plotting code where i was testing which fit was better
         #plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, 'k-')
         #plt.plot(x.value, y_fit, 'r--',alpha = .6, label = 'Specutils Fitting')
         #plt.plot(x.value, y_curve, 'y--',alpha = .7, label = 'Curve Fit')
@@ -583,14 +624,105 @@ def analysis(flux, wavelength, filt, emission_lines, z, continuum_func):
         #plt.legend(loc='best')
         #plt.show()    
     
-    print('Emission Line -------- ew_spec --------- ew_manual --------- flux_spec -------- manual_flux --------- continuum val')
+    ###################################
+    #Emission Line Stuff
+    ###################################
+    
+    #I need a way to test which lines I found and compare that with lines of interest but I also
+    #want to keep the information that I have.
+    print('    Line Name ----- Rest Line -------  WvlnConv')
+    for i in emission_line_fit:
+        
+        index = abs(line- i/(1+z)).argmin()
+        print('%13s ----- %9.2f ------- %9.2f' %(line_name[index], line[index], i/(1+z)))
+    
+    print()
+    print()
+    print('Emission Line ------ Emission Fit------ ew_spec ------- ew_manual ------- flux_spec ------ manual_flux ------- continuum val')
     for i in range(len(e_width)):
-        print('%9.2f ------ %9.2f ------ %9.2f ----- %9.2f ----- %9.2f ------ %9.2f' %(emission_lines[i].value, e_width[i].value, manual_ew[i].value, lines_flux[i].value, line_f[i], continuum_val[i].value))
-    print()    
-     #   print('-----')
-    #plt.show()    
-    #returning the lists declared above
-    #return emission_line, lines_flux, e_width
+        print('%13.2f ------ %12.2f ------ %7.2f ------- %9.2f ------- %9.2f ------ %11.2f ------- %13.2f' 
+              %(emission_lines[i]/(1+z), emission_line_fit[i]/(1+z), e_width[i].value, 
+                manual_ew[i], lines_flux[i].value, line_f[i], continuum_val[i].value))
+    
+    
+    print() 
+    print()
+    
+    
+    print(' Rest Line ------------- LCR Specutils ----------- LCR Curve Fit')
+    for i in range(len(emission_line_fit)):
+        index = abs((line*(1+z))-emission_line_fit[i]).argmin()
+        print('%9.2f ------------- %13.2f ----------- %13.2f' %(line[index], emission_lines[i]/(1+z), emission_line_fit[i]/(1+z)))
+    
+    
+    return np.array(emission_lines), np.array(line_f), np.array(manual_ew)
+
+def lines_of_interest(line_names, emission, line_rest, z):
+    
+    '''
+    This function will try to give us measurements regarding lines that we are interested in
+    
+    '''
+    
+    helium_filt = [True if 'He' in x else False for x in line_name]
+    oxygen_filt = [True if 'OII' in x else False for x in line_name]
+    alpha_filt = np.array([True if 'Halpha' in x else False for x in line_name])
+    beta_filt = np.array([True if 'Hbeta' in x else False for x in line_name]) 
+    NII_filt = np.array([True if 'NII' in x else False for x in line_name])
+    
+    master_filter = np.ones(len(oxygen_filt), dtype = bool)
+    
+    for i in range(len(alpha_filt)): 
+        if alpha_filt[i] or beta_filt[i] or NII_filt[i] or helium_filt[i] or oxygen_filt[i]: 
+            master_filter[i] = True 
+        else: 
+            master_filter[i] = False
+    
+    interest_lines = line_rest[master_filter]
+    interest_names = line_names[master_filter]
+    
+    conv_to_rest = emission/(1+z)
+    #print(interest_names)
+    #print(interest_lines)
+          
+    for i in conv_to_rest:
+        ind = abs(interest_lines - i).argmin()
+        #print(np.delete(interest_lines, ind))
+        #print(np.delete(interest_names, ind))
+     
+    pass
+    
+def possible_flux(line_name, line_wavelength, z, flux, wavelength):
+    
+    ind1 = np.where(line_wavelength < wavelength[0]/(1+z))
+    ind2 = np.where(line_wavelength > wavelength[-1]/(1+z))
+    ind_tot = np.concatenate((ind1, ind2), axis = None)
+    
+    master_filt = np.ones(len(line_name), dtype = bool)
+    
+    master_filt[ind_tot] = False
+    
+    reduced_line_name = line_name[master_filt]
+    reduced_line_wave = line_wavelength[master_filt]
+    
+    plt.plot(wavelength/(1+z), flux)
+    
+    for i in reduced_line_wave:
+        plt.axvline(i, linestyle = '--', color = 'red')
+    
+    plt.show()
+    
+def sorting_info(z, line_rest, line_names, emission, flux, ew):
+    
+    conv_to_rest = emission/(1+z)
+    line_nam = []
+    line_wave = []
+    
+    for i in conv_to_rest:
+        
+        ind = abs(line_rest-i).argmin()
+        line_nam.append(line_names[ind])
+        line_wave.append(line_rest[ind])
     
 def smooth_function(spectrum, wavelength, window):
     
@@ -618,6 +750,32 @@ def smooth_function(spectrum, wavelength, window):
 #ax2 = fig.add_subplot(312)
 #ax3 = fig.add_subplot(313)
 
+'''
+
+file = 'median_J014707+135629_cem.fits'
+sp1 = file.split('_')[1]
+sp2 = sp1.split('+')[0]
+
+match = ID_1 == sp2
+#print(match)
+z1 = z_redshift[match]
+#print(z1)
+
+spec, wvln = spectrum(file)
+
+possible_flux(line_name, line_wavelength, z1, spec, wvln)
+
+spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, file)
+ind = np.where(wvln < 4500)
+ind2 = np.where(wvln > 6350)
+ind_tot = np.concatenate((ind, ind2), axis=None)
+filt[ind_tot] = False
+percentile = 98
+print(i)
+emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
+lines_of_interest(line_name, emission_line, line_wavelength, z1)
+
+'''
 for i in files:
     
     if 'cem.fits' in i:
@@ -633,11 +791,15 @@ for i in files:
         spec, wvln = spectrum(i)
         
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
-        
+        ind = np.where(wvln < 4500)
+        ind2 = np.where(wvln > 6350)
+        ind_tot = np.concatenate((ind, ind2), axis=None)
+        filt[ind_tot] = False
+        percentile = 98
         print(i)
-        analysis(spectra, wvln, filt, line_wavelength, z1, cont_func)
+        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
         
-        #ax1.plot(wvln, spec, label = i)
+        #ax1.plot(wvln[filt], spec[filt], label = i)
         
     if 'mods1b' in i:
         
@@ -651,9 +813,9 @@ for i in files:
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
-        
+        percentile = 97
         print(i)
-        analysis(spectra, wvln, filt, line_wavelength, z1, cont_func)
+        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
         
         #ax2.plot(wvln, spec, label = i)
     
@@ -668,12 +830,14 @@ for i in files:
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
-        
+        percentile = 98
         print(i)
-        analysis(spectra, wvln, filt, line_wavelength, z1, cont_func)
+        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
         
         #ax3.plot(wvln, spec, label = i)
+        
 
+'''
 #ax1.set_ylim(-2, 75)
 #ax2.set_ylim(-2, 75)
 #ax3.set_ylim(-2, 75)
@@ -681,8 +845,7 @@ for i in files:
 #ax2.legend(loc='best')
 #ax3.legend(loc='best')
 #plt.show()    
-
-'''            
+           
 def gain_calculations(file_spec, file_sdss, z, line_lam):
     
     
