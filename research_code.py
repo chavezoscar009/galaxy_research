@@ -37,7 +37,7 @@ file_num = np.unique([x.split('_')[1] for x in files])
 
 
 #reading in the dat file
-ID, redshift = np.genfromtxt('targets.dat', usecols=(0,1), unpack = True, skip_header=2, dtype = 'str')
+ID, redshift, see = np.genfromtxt('targets.dat', usecols=(0,1, 8), unpack = True, skip_header=2, dtype = 'str')
 
 ID1 = [x.split('.')[0] for x in ID]
 
@@ -53,6 +53,7 @@ z = redshift.astype(float)
 ID_1 = np.array(ID1)[filt_z]
 z_redshift = np.array(z)[filt_z]
 
+seeing = np.array(see.astype(float))[filt_z]
 
 
 line_info = np.genfromtxt('linelist.dat', unpack =True, dtype='str', usecols=(0,1), skip_header = 1)
@@ -61,7 +62,7 @@ line_wavelength = line_info[0].astype(float)
 line_name = line_info[1]
 
 
-def fitting_gaussian(data, wavelength):
+def fitting_gaussian(data, wavelength, filename):
     
     '''
     This function will fit a gaussian to median combined coulmn data corresponding to a window around the trace. 
@@ -93,41 +94,72 @@ def fitting_gaussian(data, wavelength):
         factor = np.exp(-(x-mu)**2/(2*sigma**2))
         return prefactor * factor
     
+    #this will hold the sigma valueas and wavelength value of the median gaussian fit
     sig = []
     wvln = []
-        
+    mean = []
+    
+    #N represent how big of a chunk to median 
     N = 21
+    
+    #skips 50 columns so that we do not get alot of data points
     skip = 50
     
+    #start and end are where in the column array we focus and median out for the gaussian fit
     start = 0
     end = N
     
+    #counter variable used for debugging purposes
     i = 0
+    
+    #plotting code to see how the sigma vs wavelength relation was like
     #plt.figure(figsize = (10,10))
-    #plt.title('Sigma vs wvln')
+    #plt.title(filename + ': Sigma vs wvln')
     
     while True:
         
-        #print(start)
-        #print(end)
-        #print()
-        
+        #here we take the median of the column data between start and end
         median_data = np.median(data[:, start:end], axis = 1)
+        
+        #here we take the median wavelength between start and end
         med_wvln = np.median(wavelength[start:end])
         
+        # this checks to see if the maximum median value is zero we increment start and end and we pass on this data
+        #this would not work with the gaussina fitting method
         if np.amax(median_data) == 0:
             start = start + N + skip
             end = start + N
             continue
         
+        ################
+        #FITTING
+        #--------------
+        #If everything is good then we fit the data with a gaussian using curve_fit below
+        ################
+        
+        #We pass into curve fit: x which is the pixel values of the rows
+        #                        median_data which is the median column 
+        #Initial Guesses: A: max value of the median_data, Mean: middle of the median data, sigma: 40
+        #
+        #Bounds: A: 0-max(median_data)
+        #        mean: 0-len(median_data)
+        #        sigma: 1-100
+        
+        #popt is the best fit parameter values
+        #covar is error on the parameters
         popt, covar = curve_fit(f, x, median_data, 
                                 p0 = [np.amax(median_data), len(median_data)//2, 40], 
                                 bounds=[(0, 0, 1), (np.amax(median_data), len(data[:, 0]), 100)])
+        
+        #std_dev holds the standard deviation for the gaussian fit
         std_dev = popt[-1]
         
+        #appending the sigma and wavelength to the list
         sig.append(std_dev)
         wvln.append(med_wvln)
+        mean.append(popt[1])
         
+        #incrementing start and end column values
         start = start + N + skip
         end = start + N
         
@@ -137,6 +169,8 @@ def fitting_gaussian(data, wavelength):
         #plt.plot(wvln, medfilt(sig, kernel_size = 7))
         #plt.show()
         
+        #checks to see if start or end is beyond the length of the column of the 2D array
+        #if it is then this breaks from the while loop
         if start > len(data[0,:]) or end > len(data[0,:]):
             #print(i)
             #i+=1
@@ -151,9 +185,75 @@ def fitting_gaussian(data, wavelength):
         #y = norm.pdf(x, popt[-2], std_dev)
         
         #test = np.random.normal(popt[-2], std_dev, 1000)
+    
+    #this holds the filename split along the underscore
+    t = filename.split('_')
+    
+    if 'cem.fits' in filename:
         
-    #plt.plot(wvln, medfilt(sig, kernel_size = 7))
-    #plt.show()
+        sig_filt = medfilt(sig, kernel_size = 7)
+        
+        sigma = np.amax(sig_filt)
+        
+        y = norm.pdf(x, len(median_data)//2, sigma)
+        renorm_y = y/np.amax(y)
+        
+        return renorm_y
+        
+        '''
+        #this variable holds the middle portion of the filename
+        l = t[1]
+        
+        test = np.percentile(sig_filt, 70, interpolation='midpoint')
+        mu = np.mean(sig_filt)
+        
+        v = test * np.ones(len(sig_filt))
+        w = 2*mu * np.ones(len(sig_filt))
+        U = mu * np.ones(len(sig_filt))
+        
+        #plotting code
+        plt.plot(wvln, sig_filt, 'r-', alpha = .7)
+        plt.plot(wvln, v, 'k--', label = 'Percentile')
+        plt.plot(wvln, w, 'y--', label = '2*Mean')
+        plt.plot(wvln, U, 'b--', label = 'Mean')
+        plt.legend(loc='best')
+        #plt.savefig('Sigma_vs_Wavelength_'+l+'_cem.pdf')
+        plt.show()
+        '''
+    
+    else:
+        
+        sig_filt = medfilt(sig, kernel_size = 7)
+        
+        sigma = np.mean(sig_filt)
+        
+        y = norm.pdf(x, len(median_data)//2, sigma)
+        renorm_y = y/np.amax(y)
+        
+        return renorm_y
+        
+        '''
+        #the two variables below hold the middle portions of the filename 
+        #these are the distiguishing features as they tell us which object it is
+        l = t[1]
+        m = t[2]
+        
+        test = np.percentile(sig_filt, 90)
+        v = test * np.ones(len(sig_filt))
+        
+        mu = np.mean(sig_filt)
+        w = 2*mu * np.ones(len(sig_filt))
+        U = mu * np.ones(len(sig_filt))
+        
+        #plotting code
+        plt.plot(wvln, sig_filt, 'r-', alpha = .7)
+        plt.plot(wvln, v, 'k--')
+        plt.plot(wvln, w, 'y--', label = '2*Mean')
+        plt.plot(wvln, U, 'b--', label = 'Mean')
+        plt.legend(loc='best')
+        #plt.savefig('Sigma_vs_Wavelength_'+l+m+'.pdf')
+        plt.show()
+    
     #line = np.polyfit(wvln[4:], sig[4:], deg=1)
     
     #x = np.linspace(wvln[0], wvln[-1], 1000)
@@ -168,6 +268,7 @@ def fitting_gaussian(data, wavelength):
     #print(len(y))
     
     return renorm_y
+    '''
 
 def fitting_lines(spectrum, mu_guess, sig_guess=4):
     
@@ -337,24 +438,42 @@ def spectrum(file):
     adding_target = np.sum(boxed_data, axis = 0)
     
     #this returns a gaussian fit to the spectrum so that more 
-    gauss_mult = fitting_gaussian(boxed_data, wvln_spec)
-     
-    #plt.figure(figsize = (10,10))
-    #plt.imshow(gauss_mult*boxed_data, origin='lower', cmap='gray', norm = LogNorm())
-    #plt.colorbar()
-    #plt.show()
+    gauss_mult = fitting_gaussian(boxed_data, wvln_spec, file)
     
-    gauss_filtered = (boxed_data.T * gauss_mult/np.amax(gauss_mult)).T
+    gauss_filtered = (boxed_data.T * gauss_mult).T
     
     gauss_added = np.sum(gauss_filtered, axis = 0)
     
-    #plt.figure(figsize = (16, 6))
-    #plt.plot(wvln_spec, gauss_added)
-    #plt.show()
+    ''' 
+    plt.figure(figsize = (10,10))
+    plt.imshow((gauss_mult*boxed_data.T).T, origin='lower', cmap='gray', norm = LogNorm())
+    plt.colorbar()
+    plt.show()
+    
+    fig = plt.figure(figsize = (16, 10))
+    ax1 = fig.add_subplot(311)
+    ax2 = fig.add_subplot(312, sharex = ax1)
+    ax3 = fig.add_subplot(313, sharex = ax2)
+    
+    ax1.set_title('Adding Rows')
+    ax1.plot(wvln_spec, medfilt(adding_target, kernel_size = 5))
+    
+    ax2.set_title('Gaussian Multiplied Rows')
+    ax2.plot(wvln_spec, medfilt(gauss_added, kernel_size = 5))
+    
+    ax3.set_title('Both')
+    ax3.plot(wvln_spec, medfilt(adding_target, kernel_size = 5), 'r-', alpha = .6, label = 'Adding')
+    ax3.plot(wvln_spec, medfilt(gauss_added, kernel_size = 5), 'k--', label = 'Gauss Added')
+    ax3.legend(loc = 'best')
+    
+    fig.tight_layout()
+    
+    plt.show()
+    '''
     
     #np.savez('spectra.npz', flux=gauss_added, wave = wvln_spec)
     
-    return adding_target, wvln_spec  
+    return medfilt(gauss_added, kernel_size = 5), wvln_spec  
 
 def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     
@@ -450,16 +569,16 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     
     y = np.zeros(len(wavelength_spec))
     
-    ax1.set_title(file)
+    ax1.set_title(file + ' Continuum Subtraction')
     ax1.set_ylim(-5, 50)
     #ax2.set_ylim(-5, 75)
     
     ax1.plot(wavelength_spec, spectra)
-    ax1.plot(wavelength_spec, y)
+    ax1.plot(wavelength_spec, y, label = 'y = 0')
     
     ax2.set_title('Continuum Subtracted Spectrum')
     ax2.plot(wavelength_spec, spectra-y_continuum.value)
-    ax2.plot(wavelength_spec, y)
+    ax2.plot(wavelength_spec, y, label = 'y = 0')
     
     #ax3.set_title('Medfiltered Continuum Subtracted Spec')
     #ax3.plot(wavelength_spec, medfilt(spectra-y_continuum.value, kernel_size = 5))
@@ -480,7 +599,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
 
     return continuum_subtracted_spec, continuum_fit, filt_noise
 
-def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name):
+def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion):
     '''
     
     This function will take in a 1D extracted spectrum and the emission QTables gathered from the 
@@ -529,6 +648,15 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #getting only the emission lines
     emission = lines[lines['line_type'] == 'emission']
     
+    '''
+    plt.figure(figsize = (14, 6))
+    plt.plot(spectrum.spectral_axis, spectrum.flux, 'b-')
+    for i in emission['line_center'].value:
+        plt.axvline(i, linestyle= '--', color = 'red')
+    
+    plt.show()
+    '''
+    
     #making the lists so that I can append the analysis later
     
     #has the emission lines found by specutils
@@ -554,6 +682,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     
     #for loop that goes through each of the emission lines and does flux and equivalent width analysis
     #plt.figure(figsize = (12, 6))
+    
+    line_center_index = []
     
     for i in emission['line_center']:
        
@@ -609,6 +739,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #getting the center of the emission peak from curve_fit and appending it
         emission_line_fit.append(par[1])
         
+        line_center_index.append(abs(spectrum.spectral_axis.value - par[1]).argmin()) 
+        
         #appending the manual flux calculations
         line_f.append(flux_line)
         
@@ -623,21 +755,194 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #plt.axvline(i.value, linestyle = '--', color='red')
         #plt.legend(loc='best')
         #plt.show()    
-    
+        
+    #making a for loop to test spatial compnent of our spectrums    
+    for i in line_center_index:
+        
+        #the window of pixels to look around
+        window = 15
+        
+        #making an x array that ranges in index from i-window to i+window
+        x = range(i-window, i+window)
+        
+        #maknig the star and end of the splicing of our array
+        start = i-window
+        end = i+window
+        
+        #checking to make sure that our starting index is still within the array and doesn't loop back
+        if i - window < 0:
+            continue
+        
+        #makes a reduced spectrum from i +/- window
+        spe = flux[filt][start:end]
+        
+        #fits gaussian to it
+        param, covar = curve_fit(f, x, spe, p0=[np.amax(spe), i, 7])
+        
+        #makes another x array this time for fitting purposes
+        x1 = np.linspace(i-window, i+window, 1000)
+        
+        #the gaussian curve
+        y_curve = f(x1, *param)
+        
+        #gettign the pixel sigma from seeing/conversion seeing is in arcsec and conversion is in arcsec/pixel
+        sig_seeing = seeing/conversion
+        
+        #makes a gaussian with same amplitude and center but with the sigma from the sig_seeing
+        y_seeing = f(x1, param[0], param[1], sig_seeing)
+        
+        #plots it for each line
+        
+        #plt.figure(figsize = (10,10))
+        #plt.plot(x, spe)
+        #plt.plot(x1, y_curve)
+        #plt.plot(x1, y_seeing, 'r--', label = 'Seeing')
+        #plt.legend(loc='best')
+        #plt.show()
+        
     ###################################
     #Emission Line Stuff
     ###################################
+          
+    '''
+    total_spectrum = Spectrum1D(spectral_axis=wavelength*u.angstrom, flux =flux*u.erg/u.s/u.cm/u.cm/u.angstrom)
+    
+    interest = np.zeros(len(line), dtype = bool)
+    
+    for i, val in enumerate(line_name):
+        if val == 'Hbeta' or val == 'Halpha' or val =='[OIII]5007' or val == '[NII]6583':
+            interest[i] = True
+            
+    line_of_interest = np.array(line)[interest]
+    line_name_interest = np.array(line_name)[interest]
+    
+    print(line_name_interest)
+    print(line_of_interest)
+    
+    #plt.figure(figsize = (14, 6))
+    
+    for l, val in enumerate(line_of_interest):
+        
+        if val*(1+z) < wavelength[0] or val*(1+z) > wavelength[-1]:
+            continue
+        
+        else:
+            
+            #making a window to look around the line center so that I can do some analysis using specutils
+            #as well as my own homemade functions
+            window = 25*u.angstrom
+
+            #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
+            sub_region = SpectralRegion(val*(1+z)*u.angstrom - window, val*(1+z)*u.angstrom + window)
+            sub_spectrum = extract_region(total_spectrum, sub_region)
+            
+            plt.figure(figsize = (10, 10))
+            plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, color='red', alpha = .6, label = 'flux')
+            plt.show()
+            
+            
+            par = fitting_lines(sub_spectrum, val*(1+z[0]))
+            
+            flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+            manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom).value)
+            
+            x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
+            y_curve = f(x.value, *par)
+            
+            plt.figure(figsize = (10, 10))
+            plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, color='red', alpha = .6, label = line_name_interest[l])
+            plt.plot(x, y_curve, color='black')
+            plt.legend(loc='best')
+            plt.show()
+            
+    
+    #plt.legend(loc = 'best')
+    plt.show()
+    
+    #plt.figure(figsize = (14, 6))
+    #plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .6)
+    '''
     
     #I need a way to test which lines I found and compare that with lines of interest but I also
-    #want to keep the information that I have.
-    print('    Line Name ----- Rest Line -------  WvlnConv')
-    for i in emission_line_fit:
-        
-        index = abs(line- i/(1+z)).argmin()
-        print('%13s ----- %9.2f ------- %9.2f' %(line_name[index], line[index], i/(1+z)))
+    #want to keep the information that I have, I also need a way to get rid of duplicates need a criteria
+    #to discern an actual line vs not a line:
     
+    '''
+    rest_line = []
+    name_line = []
+    line_center = []
+    flux = []
+    EW = []
+    
+    ind_catalog = []
+    ind_calculation = []
+    
+    line_catalog_filt = np.ones(len(line), dtype = bool)
+    calculation_filt = np.ones(len(line_f), dtype = bool)
+
+    
+    #plt.figure(figsize = (14, 6))
+    #plt.title(filename[:-5] + ' at z = ' + str(z[0]))
+    #plt.plot(spectrum.spectral_axis/(1+z[0]), spectrum.flux, 'k-', alpha = .6)
     print()
-    print()
+    print('    Line Name ----- Rest Line -------  WvlnConv -------     Flux -------     EW  ')
+    
+    for i, val in enumerate(emission_line_fit):
+        
+        #this will be the index in the line catalog information where the closest match is
+        index = abs(line-(val/(1+z))).argmin()
+        
+        #print(line-(i/(1+z[0])))
+        
+        #gets the rest frame wavelength from the catalog
+        rest_l = line[index]
+        rest_name = line_name[index]
+        
+        
+        
+        #this finds the index of where the rest line is closest to in the emission lines that I got
+        #this index can be used for equivalent width and flux 
+        ind = abs(rest_l*(1+z[0]) - emission_line_fit).argmin()
+        
+        if rest_l in rest_line:
+            continue
+        
+        else:
+            
+            #print('%13s ----- %9.2f ------- %9.2f ------- %9.2f ------- %9.2f' %(rest_name, rest_l, val/(1+z), line_f[ind], manual_ew[ind]))
+            
+            ind_catalog.append(index)
+            ind_calculation.append(ind)
+            
+            #plt.axvline(rest_l * (1+z[0]), linestyle = '--', color = 'red', linewidth = .5)
+            #plt.text(rest_l  + 2 , np.amax(spectrum.flux.value)/2, rest_name, rotation = 270, fontsize = 'x-small')
+            
+            
+            rest_line.append(rest_l)
+            name_line.append(rest_name)
+            line_center.append(val/(1+z))
+            flux.append(line_f[ind])
+            EW.append(manual_ew[ind])
+            
+            print('%13s ----- %9.2f ------- %9.2f ------- %9.2f ------- %9.2f' %(rest_name, rest_l, val/(1+z[0]), line_f[ind], manual_ew[ind]))
+            
+    #plt.savefig(filename[7:-5]+'_z_'+str(z[0])+'.pdf')
+    
+    #for j in emission_line_fit:
+     #   print('Halpha:   ' + str(j/(1+z[0]))+' ---------- ' + str(6562.8))
+      #  print('NII6583:    ' + str(j/(1+z[0])) + ' ------------ ' + str(6583))
+       # print()
+     #   plt.axvline(j/(1+z[0]), linestyle = '-', color = 'blue', linewidth = .6)
+        
+    #plt.show()
+    
+    line_catalog_filt[ind_catalog] = False
+    calculation_filt[ind_calculation] = False
+    
+    #print(len(line[line_catalog_filt]))
+    '''
+    
+    '''
     print('Emission Line ------ Emission Fit------ ew_spec ------- ew_manual ------- flux_spec ------ manual_flux ------- continuum val')
     for i in range(len(e_width)):
         print('%13.2f ------ %12.2f ------ %7.2f ------- %9.2f ------- %9.2f ------ %11.2f ------- %13.2f' 
@@ -645,15 +950,37 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
                 manual_ew[i], lines_flux[i].value, line_f[i], continuum_val[i].value))
     
     
-    print() 
-    print()
+    #print() 
+    #print()
     
+    rest_line = []
+    l = []
     
-    print(' Rest Line ------------- LCR Specutils ----------- LCR Curve Fit')
-    for i in range(len(emission_line_fit)):
-        index = abs((line*(1+z))-emission_line_fit[i]).argmin()
-        print('%9.2f ------------- %13.2f ----------- %13.2f' %(line[index], emission_lines[i]/(1+z), emission_line_fit[i]/(1+z)))
+    #print(' Rest Line ------------- LCR Specutils ----------- LCR Curve Fit')
+    for i in emission_line_fit:
+        
+        index = abs(line-(i/(1+z))).argmin()
+        
+        rest_l = line[index]
+        
+        ind = abs(rest_l - (emission_line_fit/(1+z))).argmin()
+
+        test_z = (rest_l - emission_line_fit[ind])/rest_l
+
+        
+        if rest_l in rest_line:
+            continue
+        
+        else:
+        
+            #print('%9.2f ------------- %13.2f ----------- %13.2f' %(rest_l, emission_lines[ind]/(1+z), emission_line_fit[ind]/(1+z)))
+            rest_line.append(rest_l)
+        #plt.axvline(rest_l * (1+z), linestyle = '--', )
     
+    #plt.savefig('Testing_redshift_'+str(z)+'.pdf')
+    #plt.show()    
+    #print()
+    '''
     
     return np.array(emission_lines), np.array(line_f), np.array(manual_ew)
 
@@ -786,6 +1113,10 @@ for i in files:
         match = ID_1 == sp2
         #print(match)
         z1 = z_redshift[match]
+        
+        seeing_t = seeing[match]
+        
+        conversion = .188
         #print(z1)
         
         spec, wvln = spectrum(i)
@@ -797,7 +1128,9 @@ for i in files:
         filt[ind_tot] = False
         percentile = 98
         print(i)
-        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
+        print('-----------------------')
+        print()
+        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, i, seeing_t, conversion)
         
         #ax1.plot(wvln[filt], spec[filt], label = i)
         
@@ -810,12 +1143,18 @@ for i in files:
         
         #print(match)
         z1 = z_redshift[match]
+        seeing_t = seeing[match]
+        
+        conversion = .12
+        
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         percentile = 97
         print(i)
-        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
+        print('-----------------------')
+        print()
+        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, i, seeing_t, conversion)
         
         #ax2.plot(wvln, spec, label = i)
     
@@ -827,12 +1166,18 @@ for i in files:
         match = ID_1 == sp2
         #print(match)
         z1 = z_redshift[match]
+        seeing_t = seeing[match]
+        
+        conversion = .123
+        
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         percentile = 98
         print(i)
-        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
+        print('-----------------------')
+        print()
+        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, i, seeing_t, conversion)
         
         #ax3.plot(wvln, spec, label = i)
         
