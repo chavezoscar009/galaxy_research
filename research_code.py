@@ -24,6 +24,7 @@ from specutils.fitting import estimate_line_parameters
 from specutils.fitting import fit_lines
 from specutils.analysis import equivalent_width
 from specutils.manipulation import extract_region  
+from astropy.table import Table, Column
 
 #grabbing all of micaela's fits files from the current directory
 files = [x for x in glob.glob('*.fits') if 'SDSS' not in x]
@@ -628,34 +629,134 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     def f(x, A, mu, sig):
         return A * np.exp(-(x-mu)**2/(2*sig**2))
     
-    #making our Spectrum1D object getting rid of the noise in the outer portion of the spectrum
-    spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+    spectrum = 0
+    threshold = 0
+    
+    if 'mods1r' in filename:
+        if 'J082540+184617' in filename:
+            offset = 15
+            spectrum = Spectrum1D(spectral_axis=(wavelength[filt]-offset)*u.angstrom, 
+                              flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+            #sorting the data
+            data = np.sort(flux[filt])
+
+            #making the threshold for the flux to be above a percentile value
+            threshold = np.percentile(data, q=percentile, interpolation='midpoint')/1.8     
+        else:
+            offset = 18.5
+            spectrum = Spectrum1D(spectral_axis=(wavelength[filt]-offset)*u.angstrom, 
+                                  flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+            #sorting the data
+            data = np.sort(flux[filt])
+
+            #making the threshold for the flux to be above a percentile value
+            threshold = np.percentile(data, q=percentile, interpolation='midpoint')/1.8
+    elif 'J073149+404513' in filename and 'mods1b' in filename:
+        offset = 8
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]-offset)*u.angstrom, 
+                          flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+    
+    elif 'J021306+005612' in filename and 'mods1b' in filename:
+        offset = 2
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
+                          flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+    
+    elif 'J082540+184617' in filename and 'mods1b' in filename:
+        offset = 1
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
+                          flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')    
+        
+    elif 'J030903+003846' in filename and 'cem' in filename:
+        offset = 3
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
+                          flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+    
+    elif 'J231903+010853' in filename and 'cem' in filename:
+        offset = 3
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
+                          flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+    
+    elif 'J014707+135629' in filename and 'cem' in filename:
+        offset = 3
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
+                          flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+        
+    else:
+        #making our Spectrum1D object getting rid of the noise in the outer portion of the spectrum
+        spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, 
+                              flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+        #sorting the data
+        data = np.sort(flux[filt])
+        
+        #making the threshold for the flux to be above a percentile value
+        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
     
     #making a way to automatically check for emisison lines. For this I sort the data and then pick a percentile 
     #from which anything above that will be considered an emission line.
     
     #NOTE: this percentile changes for different files
     
-    #sorting the data
-    data = np.sort(flux[filt])
-    
-    #making the threshold for the flux to be above a percentile value
-    threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+   
+    '''
+    threshold_limit_test = np.linspace(1, 1.5, 6)
+    plt.figure(figsize = (14, 6))
+    plt.plot(spectrum.spectral_axis, spectrum.flux, 'b-')
+    for i, val in enumerate(threshold_limit_test):
+        
+        #finding lines using specutils line_derivative function
+        lines = find_lines_derivative(spectrum, flux_threshold=val)
+
+        #getting only the emission lines
+        emission = lines[lines['line_type'] == 'emission']
+
+        y = (threshold/val)*np.ones(len(spectrum.spectral_axis))
+        
+        plt.plot(spectrum.spectral_axis, y , label = str(threshold/val))
+        
+        plt.legend(loc ='best', ncol=2)
+        #for i in emission['line_center'].value:
+            #plt.axvline(i, linestyle= '--', color = 'red')
+            
+    y_2 = (threshold/2)*np.ones(len(spectrum.spectral_axis))
+    plt.plot(spectrum.spectral_axis, y_2 , label = str(threshold/2))
+    plt.show()
+    '''    
     
     #finding lines using specutils line_derivative function
     lines = find_lines_derivative(spectrum, flux_threshold=threshold)
-    
+
     #getting only the emission lines
     emission = lines[lines['line_type'] == 'emission']
-    
-    '''
-    plt.figure(figsize = (14, 6))
-    plt.plot(spectrum.spectral_axis, spectrum.flux, 'b-')
-    for i in emission['line_center'].value:
-        plt.axvline(i, linestyle= '--', color = 'red')
-    
-    plt.show()
-    '''
     
     #making the lists so that I can append the analysis later
     
@@ -719,12 +820,12 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         
         #making an x and y array for plotting, Used this for debugging purposes and check quality
         #of fit
-        #x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
+        x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
         #y_values from specutils fit
-        #y_fit = g_fit(x)
+        y_fit = g_fit(x)
         
         #y_values from curve_fit fit
-        #y_curve = f(x.value, *par)
+        y_curve = f(x.value, *par)
 
         #getting the equivalent width of the subregion using specutils function
         e_width.append(equivalent_width(sub_spectrum,
@@ -751,10 +852,10 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, 'k-')
         #plt.plot(x.value, y_fit, 'r--',alpha = .6, label = 'Specutils Fitting')
         #plt.plot(x.value, y_curve, 'y--',alpha = .7, label = 'Curve Fit')
-        #plt.axvline(param.mean.value)
+        #plt.axvline(param.mean.value, linestyle = '--', color='red')
         #plt.axvline(i.value, linestyle = '--', color='red')
         #plt.legend(loc='best')
-        #plt.show()    
+    #plt.show()    
         
     #making a for loop to test spatial compnent of our spectrums    
     for i in line_center_index:
@@ -867,7 +968,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #want to keep the information that I have, I also need a way to get rid of duplicates need a criteria
     #to discern an actual line vs not a line:
     
-    '''
+    
     rest_line = []
     name_line = []
     line_center = []
@@ -883,14 +984,16 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     
     #plt.figure(figsize = (14, 6))
     #plt.title(filename[:-5] + ' at z = ' + str(z[0]))
-    #plt.plot(spectrum.spectral_axis/(1+z[0]), spectrum.flux, 'k-', alpha = .6)
-    print()
-    print('    Line Name ----- Rest Line -------  WvlnConv -------     Flux -------     EW  ')
+    #plt.xlabel(r'Rest Frame Wavelength [$\AA$]')
+    #plt.ylabel(r'Flux [$10^{-17} \frac{erg}{s\hspace{.5} cm^2 \hspace{.5} \AA} $]')
+    #plt.plot(spectrum.spectral_axis.value/(1+z[0]), spectrum.flux, 'k-', alpha = .6)
+    #print()
+    #print('    Line Name ----- Rest Line -------  WvlnConv -------     Flux -------     EW  ')
     
     for i, val in enumerate(emission_line_fit):
         
         #this will be the index in the line catalog information where the closest match is
-        index = abs(line-(val/(1+z))).argmin()
+        index = abs(line-(val/(1+z[0]))).argmin()
         
         #print(line-(i/(1+z[0])))
         
@@ -914,34 +1017,36 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
             ind_catalog.append(index)
             ind_calculation.append(ind)
             
-            #plt.axvline(rest_l * (1+z[0]), linestyle = '--', color = 'red', linewidth = .5)
-            #plt.text(rest_l  + 2 , np.amax(spectrum.flux.value)/2, rest_name, rotation = 270, fontsize = 'x-small')
+            #plt.axvline(rest_l, linestyle = '--', color = 'red', linewidth = .5)
+            #plt.axvline(val, linestyle = '--', color = 'blue', linewidth = .5)
+            #plt.text(rest_l  + 2 , np.amax(spectrum.flux.value)/3, rest_name, rotation = 270, fontsize = 'x-small')
             
+           
             
             rest_line.append(rest_l)
             name_line.append(rest_name)
-            line_center.append(val/(1+z))
-            flux.append(line_f[ind])
-            EW.append(manual_ew[ind])
+            line_center.append(round(val/(1+z[0]), 2))
+            flux.append(round(line_f[ind], 2))
+            EW.append(round(manual_ew[ind], 2))
             
-            print('%13s ----- %9.2f ------- %9.2f ------- %9.2f ------- %9.2f' %(rest_name, rest_l, val/(1+z[0]), line_f[ind], manual_ew[ind]))
+            #print('%13s ----- %9.2f ------- %9.2f ------- %9.2f ------- %9.2f' %(rest_name, rest_l, val/(1+z[0]), line_f[ind], manual_ew[ind]))
+            #print()
             
     #plt.savefig(filename[7:-5]+'_z_'+str(z[0])+'.pdf')
-    
-    #for j in emission_line_fit:
-     #   print('Halpha:   ' + str(j/(1+z[0]))+' ---------- ' + str(6562.8))
-      #  print('NII6583:    ' + str(j/(1+z[0])) + ' ------------ ' + str(6583))
-       # print()
-     #   plt.axvline(j/(1+z[0]), linestyle = '-', color = 'blue', linewidth = .6)
-        
     #plt.show()
     
     line_catalog_filt[ind_catalog] = False
     calculation_filt[ind_calculation] = False
     
-    #print(len(line[line_catalog_filt]))
-    '''
+    t = Table()
+    t['line_name'] = np.array(name_line)
+    t['rest_frame_wavelength'] = np.array(rest_line)
+    t['calculated_center'] = np.array(line_center)
+    t['line_flux'] = np.array(flux)
+    t['line_EW'] = np.array(EW)
     
+    print(t)
+    print()
     '''
     print('Emission Line ------ Emission Fit------ ew_spec ------- ew_manual ------- flux_spec ------ manual_flux ------- continuum val')
     for i in range(len(e_width)):
@@ -1103,6 +1208,9 @@ emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, con
 lines_of_interest(line_name, emission_line, line_wavelength, z1)
 
 '''
+
+
+
 for i in files:
     
     if 'cem.fits' in i:
@@ -1158,6 +1266,7 @@ for i in files:
         
         #ax2.plot(wvln, spec, label = i)
     
+    
     if 'mods1r' in i:
         
         sp1 = i.split('_')[1]
@@ -1173,7 +1282,7 @@ for i in files:
         #print(z1)
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
-        percentile = 98
+        percentile = 99
         print(i)
         print('-----------------------')
         print()
