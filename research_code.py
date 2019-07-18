@@ -24,10 +24,14 @@ from specutils.fitting import estimate_line_parameters
 from specutils.fitting import fit_lines
 from specutils.analysis import equivalent_width
 from specutils.manipulation import extract_region  
-from astropy.table import Table, Column
+from astropy.table import Table, Column, vstack
+import time
+from sdss_catalog_data import plotting_BPT
+
+start = time.time()
 
 #grabbing all of micaela's fits files from the current directory
-files = [x for x in glob.glob('*.fits') if 'SDSS' not in x]
+files = [x for x in glob.glob('*.fits') if 'SDSS' not in x and 'galSpec' not in x]
 
 file_num = np.unique([x.split('_')[1] for x in files])
 
@@ -1045,8 +1049,10 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     t['line_flux'] = np.array(flux)
     t['line_EW'] = np.array(EW)
     
-    print(t)
-    print()
+    #print(t)
+    #print()
+    
+    return t
     '''
     print('Emission Line ------ Emission Fit------ ew_spec ------- ew_manual ------- flux_spec ------ manual_flux ------- continuum val')
     for i in range(len(e_width)):
@@ -1087,75 +1093,9 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #print()
     '''
     
-    return np.array(emission_lines), np.array(line_f), np.array(manual_ew)
+    #return np.array(emission_lines), np.array(line_f), np.array(manual_ew)
+    
 
-def lines_of_interest(line_names, emission, line_rest, z):
-    
-    '''
-    This function will try to give us measurements regarding lines that we are interested in
-    
-    '''
-    
-    helium_filt = [True if 'He' in x else False for x in line_name]
-    oxygen_filt = [True if 'OII' in x else False for x in line_name]
-    alpha_filt = np.array([True if 'Halpha' in x else False for x in line_name])
-    beta_filt = np.array([True if 'Hbeta' in x else False for x in line_name]) 
-    NII_filt = np.array([True if 'NII' in x else False for x in line_name])
-    
-    master_filter = np.ones(len(oxygen_filt), dtype = bool)
-    
-    for i in range(len(alpha_filt)): 
-        if alpha_filt[i] or beta_filt[i] or NII_filt[i] or helium_filt[i] or oxygen_filt[i]: 
-            master_filter[i] = True 
-        else: 
-            master_filter[i] = False
-    
-    interest_lines = line_rest[master_filter]
-    interest_names = line_names[master_filter]
-    
-    conv_to_rest = emission/(1+z)
-    #print(interest_names)
-    #print(interest_lines)
-          
-    for i in conv_to_rest:
-        ind = abs(interest_lines - i).argmin()
-        #print(np.delete(interest_lines, ind))
-        #print(np.delete(interest_names, ind))
-     
-    pass
-    
-def possible_flux(line_name, line_wavelength, z, flux, wavelength):
-    
-    ind1 = np.where(line_wavelength < wavelength[0]/(1+z))
-    ind2 = np.where(line_wavelength > wavelength[-1]/(1+z))
-    ind_tot = np.concatenate((ind1, ind2), axis = None)
-    
-    master_filt = np.ones(len(line_name), dtype = bool)
-    
-    master_filt[ind_tot] = False
-    
-    reduced_line_name = line_name[master_filt]
-    reduced_line_wave = line_wavelength[master_filt]
-    
-    plt.plot(wavelength/(1+z), flux)
-    
-    for i in reduced_line_wave:
-        plt.axvline(i, linestyle = '--', color = 'red')
-    
-    plt.show()
-    
-def sorting_info(z, line_rest, line_names, emission, flux, ew):
-    
-    conv_to_rest = emission/(1+z)
-    line_nam = []
-    line_wave = []
-    
-    for i in conv_to_rest:
-        
-        ind = abs(line_rest-i).argmin()
-        line_nam.append(line_names[ind])
-        line_wave.append(line_rest[ind])
-    
 def smooth_function(spectrum, wavelength, window):
     
     
@@ -1208,11 +1148,10 @@ emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, con
 lines_of_interest(line_name, emission_line, line_wavelength, z1)
 
 '''
-
-
+table_list = [] 
 
 for i in files:
-    
+     
     if 'cem.fits' in i:
         
         sp1 = i.split('_')[1]
@@ -1235,11 +1174,12 @@ for i in files:
         ind_tot = np.concatenate((ind, ind2), axis=None)
         filt[ind_tot] = False
         percentile = 98
-        print(i)
-        print('-----------------------')
-        print()
-        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, i, seeing_t, conversion)
-        
+        #print(i)
+        #print('-----------------------')
+        #print()
+        table = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, 
+                         i, seeing_t, conversion)
+        table_list.append(table)
         #ax1.plot(wvln[filt], spec[filt], label = i)
         
     if 'mods1b' in i:
@@ -1259,11 +1199,13 @@ for i in files:
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         percentile = 97
-        print(i)
-        print('-----------------------')
-        print()
-        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, i, seeing_t, conversion)
+       # print(i)
+        #print('-----------------------')
+        #print()
+        table = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, 
+                         line_name, i, seeing_t, conversion)
         
+        table_list.append(table)
         #ax2.plot(wvln, spec, label = i)
     
     
@@ -1283,13 +1225,136 @@ for i in files:
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         percentile = 99
-        print(i)
-        print('-----------------------')
-        print()
-        emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, i, seeing_t, conversion)
-        
+        #print(i)
+        #print('-----------------------')
+        #print()
+        table = analysis(spectra, wvln, filt, line_wavelength, z1, 
+                                           cont_func, percentile, line_name, i, seeing_t, conversion)
+        table_list.append(table)
         #ax3.plot(wvln, spec, label = i)
         
+    
+final_table = []
+
+for i in file_num:
+    
+    same_obj = np.zeros(len(files), dtype = bool)
+    
+    for j, val in enumerate(files):
+        
+        if i in val:
+            same_obj[j] = True
+    
+    obj_files = np.array(files)[same_obj]        
+    num_of_files = len(obj_files)
+    
+    reduced_table = np.array(table_list)[same_obj]
+    
+    if num_of_files == 1:
+        final_table.append(reduced_table[0])
+    
+    if num_of_files == 2:
+        
+        table1 = reduced_table[0]
+        table2 = reduced_table[1]
+        
+        master_table = vstack([table1, table2])
+        
+        final_table.append(master_table)
+
+def line_ratio_analysis(master_table):
+    #line flux is index three in the columns and we want the rows corresponding to
+    #OIII5007, Hbeta, Halpha, [NII]6583
+    
+    OIII5007 = 0
+    Hbeta = 0
+    NII6583 = 0
+    Halpha = 0
+    
+    #OIII_finder = '[OIII]5007' in master_table['line_name']
+    #NII_finder = '[NII]6583' in master_table['line_name']
+    #Halpha_finder = 'Halpha' in master_table['line_name']
+    #hbeta_finder = 'Hbeta' in master_table['line_name']
+    
+    for i, val in enumerate(master_table['line_name']):
+        
+        #looking for the row in the master table where this line is at
+        if val == '[OIII]5007':
+            #extracting the flux
+            #flux is at index three
+            OIII5007 = master_table[i][3]
+        
+        #looking for the row in the master table where this line is at
+        if val == 'Hbeta':
+            #extracting the flux
+            #flux is at index three
+            Hbeta = master_table[i][3]
+        
+        if val == 'Halpha':
+            #extracting the flux
+            #flux is at index three
+            Halpha = master_table[i][3]
+        
+        if val == '[NII]6583':
+            #extracting the flux
+            #flux is at index three
+            NII6583 = master_table[i][3]
+            
+    OIII_Hbeta = 0
+    NII_Halpha = 0
+    
+    if OIII5007 != 0 and Hbeta != 0 and NII6583 != 0 or Halpha != 0:
+        
+        OIII_Hbeta = OIII5007/Hbeta
+        NII_Halpha = NII6583/Halpha
+        
+        return round(OIII_Hbeta, 4), round(NII_Halpha, 4)
+    
+    if (OIII5007 != 0 and Hbeta != 0) and (NII6583 == 0 or Halpha == 0):
+        
+        OIII_Hbeta = OIII5007/Hbeta
+        NII_Halpha = -999999
+        
+        return round(OIII_Hbeta, 4), round(NII_Halpha, 4)
+    
+    if (OIII5007 == 0 or Hbeta == 0 )and (NII6583 != 0 and Halpha != 0):
+        
+        OIII_Hbeta = -999999
+        NII_Halpha = NII6583/Halpha
+        
+        return round(OIII_Hbeta, 4), round(NII_Halpha, 4)
+        
+ratio_OIII_hbeta = []
+ratio_NII_halpha = []
+
+for i in range(len(file_num)):
+    #print('File Number: ' + file_num[i])
+    
+    OIII_Hbeta, NII_Halpha = line_ratio_analysis(final_table[i])
+    
+    ratio_OIII_hbeta.append(OIII_Hbeta)
+    ratio_NII_halpha.append(NII_Halpha)
+    
+    #print()
+
+    
+    
+ratio_table = Table()
+
+ratio_table['ObjectID']  = np.array(file_num)
+ratio_table['OIII_Hbeta_ratio'] = np.array(ratio_OIII_hbeta)
+ratio_table['NII_Halpha_ratio'] = np.array(ratio_NII_halpha)
+
+
+
+print(ratio_table)
+
+plotting_BPT(ratio_table)
+
+end = time.time()
+
+print('Time of Program = ' + str(round((end-start)/60, 2)) + ' minutes!')
+
 
 '''
 #ax1.set_ylim(-2, 75)
