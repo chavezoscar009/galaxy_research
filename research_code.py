@@ -26,7 +26,7 @@ from specutils.analysis import equivalent_width
 from specutils.manipulation import extract_region  
 from astropy.table import Table, Column, vstack
 import time
-from sdss_catalog_data import plotting_BPT
+#from sdss_catalog_data import plotting_BPT
 
 start = time.time()
 
@@ -656,6 +656,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
             #making the threshold for the flux to be above a percentile value
             threshold = np.percentile(data, q=percentile, interpolation='midpoint')/1.8
     elif 'J073149+404513' in filename and 'mods1b' in filename:
+        #was 8.5
         offset = 8
         spectrum = Spectrum1D(spectral_axis=(wavelength[filt]-offset)*u.angstrom, 
                           flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
@@ -666,7 +667,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         threshold = np.percentile(data, q=percentile, interpolation='midpoint')
     
     elif 'J021306+005612' in filename and 'mods1b' in filename:
-        offset = 2
+        offset = 0
         spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
                           flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
         #sorting the data
@@ -676,8 +677,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         threshold = np.percentile(data, q=percentile, interpolation='midpoint')
     
     elif 'J082540+184617' in filename and 'mods1b' in filename:
-        offset = 1
-        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
+        offset = .5
+        spectrum = Spectrum1D(spectral_axis=(wavelength[filt]-offset)*u.angstrom, 
                           flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
         #sorting the data
         data = np.sort(flux[filt])
@@ -686,7 +687,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         threshold = np.percentile(data, q=percentile, interpolation='midpoint')    
         
     elif 'J030903+003846' in filename and 'cem' in filename:
-        offset = 3
+        #was 2 s
+        offset = 1
         spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
                           flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
         #sorting the data
@@ -696,7 +698,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         threshold = np.percentile(data, q=percentile, interpolation='midpoint')
     
     elif 'J231903+010853' in filename and 'cem' in filename:
-        offset = 3
+        offset = 1
         spectrum = Spectrum1D(spectral_axis=(wavelength[filt]+offset)*u.angstrom, 
                           flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
         #sorting the data
@@ -787,6 +789,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     
     #for loop that goes through each of the emission lines and does flux and equivalent width analysis
     #plt.figure(figsize = (12, 6))
+    #plt.plot(spectrum.spectral_axis, spectrum.flux)
     
     line_center_index = []
     
@@ -860,6 +863,93 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #plt.axvline(i.value, linestyle = '--', color='red')
         #plt.legend(loc='best')
     #plt.show()    
+    
+    He_line_names = np.array(['HeI3889', 'HeI6678', 'HeI7065'])
+    He_lines = np.array([3889, 6678, 7065]) * (1+z[0])*u.angstrom
+    He_line_flux = np.zeros(len(He_lines))
+    
+    #plt.figure(figsize = (14, 6))
+    #plt.plot(spectrum.spectral_axis, spectrum.flux)
+    
+    for i, val in enumerate(He_lines):
+        
+        #print(val)
+        
+        #plt.axvline(val.value, linestyle = '--', linewidth = .5, color = 'red')
+        
+        #making a window to look around the line center so that I can do some analysis using specutils
+        #as well as my own homemade functions
+        window = 15*u.angstrom
+        
+        if (val - window).value < spectrum.spectral_axis.value[0] or (val - window).value > spectrum.spectral_axis.value[-1]:
+            continue
+        
+        if (val + window).value > spectrum.spectral_axis.value[-1]:
+            continue
+            
+        #print((val - window).value < spectrum.spectral_axis.value[0])
+        
+        #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
+        sub_region = SpectralRegion(val - window, val + window)
+        sub_spectrum = extract_region(spectrum, sub_region)
+        
+        #this calls a function which fits the sub region with a gaussian and we pass in the 
+        #emission center from specutils as an initial guess
+        par = fitting_lines(sub_spectrum, val.value)
+        
+        #getting the flux of the line using scipy curve fit parameters
+        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        
+        He_line_flux[i] = flux_line
+    
+    #checking OIII line ratios
+    OIII_line_names = np.array(['OIII4363', 'OIII4959', 'OIII5007'])
+    OIII_lines = np.array([4363, 4959, 5007]) * (1+z[0]) * u.angstrom
+    OIII_line_flux = np.zeros(len(OIII_lines))
+    
+    #plt.figure(figsize = (14, 6))
+    #plt.plot(spectrum.spectral_axis, spectrum.flux)
+    
+    for i, val in enumerate(OIII_lines):
+        
+        #print(val)
+        
+        #plt.axvline(val.value, linestyle = '--', linewidth = .5, color = 'red')
+        
+        #making a window to look around the line center so that I can do some analysis using specutils
+        #as well as my own homemade functions
+        window = 15*u.angstrom
+        
+        if (val - window).value < spectrum.spectral_axis.value[0] or (val - window).value > spectrum.spectral_axis.value[-1]:
+            #print('Outside Window: ', val/(1+z[0]))
+            continue
+        
+        if (val + window).value > spectrum.spectral_axis.value[-1]:
+            #print('Outside Window', val/(1+z[0]))
+            continue
+        #print('Inside Window', val/(1+z[0]))    
+        #print((val - window).value < spectrum.spectral_axis.value[0])
+        
+        #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
+        sub_region = SpectralRegion(val - window, val + window)
+        sub_spectrum = extract_region(spectrum, sub_region)
+        
+        #this calls a function which fits the sub region with a gaussian and we pass in the 
+        #emission center from specutils as an initial guess
+        par = fitting_lines(sub_spectrum, val.value)
+        
+        #getting the flux of the line using scipy curve fit parameters
+        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        
+        OIII_line_flux[i] = flux_line    
+        
+    #plt.show() 
+    
+    #print('OIII Line -----------------     Flux')
+    
+    #for i in range(3):
+     #   print('%12.2f ----------------- %9.2f' %(OIII_lines[i].value, OIII_line_flux[i]))
+        
         
     #making a for loop to test spatial compnent of our spectrums    
     for i in line_center_index:
@@ -908,65 +998,6 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     ###################################
     #Emission Line Stuff
     ###################################
-          
-    '''
-    total_spectrum = Spectrum1D(spectral_axis=wavelength*u.angstrom, flux =flux*u.erg/u.s/u.cm/u.cm/u.angstrom)
-    
-    interest = np.zeros(len(line), dtype = bool)
-    
-    for i, val in enumerate(line_name):
-        if val == 'Hbeta' or val == 'Halpha' or val =='[OIII]5007' or val == '[NII]6583':
-            interest[i] = True
-            
-    line_of_interest = np.array(line)[interest]
-    line_name_interest = np.array(line_name)[interest]
-    
-    print(line_name_interest)
-    print(line_of_interest)
-    
-    #plt.figure(figsize = (14, 6))
-    
-    for l, val in enumerate(line_of_interest):
-        
-        if val*(1+z) < wavelength[0] or val*(1+z) > wavelength[-1]:
-            continue
-        
-        else:
-            
-            #making a window to look around the line center so that I can do some analysis using specutils
-            #as well as my own homemade functions
-            window = 25*u.angstrom
-
-            #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
-            sub_region = SpectralRegion(val*(1+z)*u.angstrom - window, val*(1+z)*u.angstrom + window)
-            sub_spectrum = extract_region(total_spectrum, sub_region)
-            
-            plt.figure(figsize = (10, 10))
-            plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, color='red', alpha = .6, label = 'flux')
-            plt.show()
-            
-            
-            par = fitting_lines(sub_spectrum, val*(1+z[0]))
-            
-            flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
-            manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom).value)
-            
-            x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
-            y_curve = f(x.value, *par)
-            
-            plt.figure(figsize = (10, 10))
-            plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, color='red', alpha = .6, label = line_name_interest[l])
-            plt.plot(x, y_curve, color='black')
-            plt.legend(loc='best')
-            plt.show()
-            
-    
-    #plt.legend(loc = 'best')
-    plt.show()
-    
-    #plt.figure(figsize = (14, 6))
-    #plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .6)
-    '''
     
     #I need a way to test which lines I found and compare that with lines of interest but I also
     #want to keep the information that I have, I also need a way to get rid of duplicates need a criteria
@@ -987,7 +1018,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
     
     #plt.figure(figsize = (14, 6))
-    #plt.title(filename[:-5] + ' at z = ' + str(z[0]))
+    #plt.title(filename[:-5])
     #plt.xlabel(r'Rest Frame Wavelength [$\AA$]')
     #plt.ylabel(r'Flux [$10^{-17} \frac{erg}{s\hspace{.5} cm^2 \hspace{.5} \AA} $]')
     #plt.plot(spectrum.spectral_axis.value/(1+z[0]), spectrum.flux, 'k-', alpha = .6)
@@ -1021,8 +1052,9 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
             ind_catalog.append(index)
             ind_calculation.append(ind)
             
-            #plt.axvline(rest_l, linestyle = '--', color = 'red', linewidth = .5)
-            #plt.axvline(val, linestyle = '--', color = 'blue', linewidth = .5)
+            #plt.axvline(rest_l, linestyle = '-', color = 'red', linewidth = .5)
+            #plt.axvline(val/(1+z[0]), linestyle = '--', color = 'blue', linewidth = .5)
+            #plt.axvline(emission_lines[i]/(1+z[0]), linestyle = '--', color = 'black', linewidth = .5)
             #plt.text(rest_l  + 2 , np.amax(spectrum.flux.value)/3, rest_name, rotation = 270, fontsize = 'x-small')
             
            
@@ -1039,6 +1071,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #plt.savefig(filename[7:-5]+'_z_'+str(z[0])+'.pdf')
     #plt.show()
     
+    
     line_catalog_filt[ind_catalog] = False
     calculation_filt[ind_calculation] = False
     
@@ -1052,7 +1085,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #print(t)
     #print()
     
-    return t
+    return t, He_line_names, He_lines.value/(1+z[0]), He_line_flux
     '''
     print('Emission Line ------ Emission Fit------ ew_spec ------- ew_manual ------- flux_spec ------ manual_flux ------- continuum val')
     for i in range(len(e_width)):
@@ -1122,37 +1155,47 @@ def smooth_function(spectrum, wavelength, window):
 #ax2 = fig.add_subplot(312)
 #ax3 = fig.add_subplot(313)
 
-'''
 
-file = 'median_J014707+135629_cem.fits'
+'''
+file = 'median_J231903+010853_cem.fits'
 sp1 = file.split('_')[1]
 sp2 = sp1.split('+')[0]
 
 match = ID_1 == sp2
 #print(match)
 z1 = z_redshift[match]
+
+seeing_t = seeing[match]
+
+conversion = .188
 #print(z1)
 
 spec, wvln = spectrum(file)
-
-possible_flux(line_name, line_wavelength, z1, spec, wvln)
 
 spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, file)
 ind = np.where(wvln < 4500)
 ind2 = np.where(wvln > 6350)
 ind_tot = np.concatenate((ind, ind2), axis=None)
 filt[ind_tot] = False
-percentile = 98
-print(i)
-emission_line, flux, EW = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name)
-lines_of_interest(line_name, emission_line, line_wavelength, z1)
+percentile = 99
+#print(i)
+#print('-----------------------')
+#print()
+table, HeI_name, He_lines, He_line_flux = analysis(spectra, wvln, filt, line_wavelength, 
+                                                       z1, cont_func, percentile, line_name, 
+                                                       file, seeing_t, conversion)
 
 '''
+
 table_list = [] 
+HeI_line_fluxes = []
+HeI_name = 0
+He_lines = 0
 
 for i in files:
      
     if 'cem.fits' in i:
+        
         
         sp1 = i.split('_')[1]
         sp2 = sp1.split('+')[0]
@@ -1174,12 +1217,16 @@ for i in files:
         ind_tot = np.concatenate((ind, ind2), axis=None)
         filt[ind_tot] = False
         percentile = 98
+        if 'J231903+010853' in i:
+            percentile = 99
         #print(i)
         #print('-----------------------')
         #print()
-        table = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, line_name, 
-                         i, seeing_t, conversion)
+        table, HeI_name, He_lines, He_line_flux = analysis(spectra, wvln, filt, line_wavelength, 
+                                                               z1, cont_func, percentile, line_name, 
+                                                               i, seeing_t, conversion)
         table_list.append(table)
+        HeI_line_fluxes.append(He_line_flux)
         #ax1.plot(wvln[filt], spec[filt], label = i)
         
     if 'mods1b' in i:
@@ -1199,13 +1246,15 @@ for i in files:
         spec, wvln = spectrum(i)
         spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         percentile = 97
-       # print(i)
+        #print(i)
         #print('-----------------------')
         #print()
-        table = analysis(spectra, wvln, filt, line_wavelength, z1, cont_func, percentile, 
-                         line_name, i, seeing_t, conversion)
+        table, He_line_names, He_lines, He_line_flux = analysis(spectra, wvln, filt, line_wavelength, 
+                                                                 z1, cont_func, percentile, 
+                                                                 line_name, i, seeing_t, conversion)
         
         table_list.append(table)
+        HeI_line_fluxes.append(He_line_flux)
         #ax2.plot(wvln, spec, label = i)
     
     
@@ -1228,12 +1277,14 @@ for i in files:
         #print(i)
         #print('-----------------------')
         #print()
-        table = analysis(spectra, wvln, filt, line_wavelength, z1, 
-                                           cont_func, percentile, line_name, i, seeing_t, conversion)
+        table, He_line_names, He_lines, He_line_flux = analysis(spectra, wvln, filt, line_wavelength, z1, 
+                                                                cont_func, percentile, line_name, i, seeing_t, conversion)
+        
         table_list.append(table)
+        HeI_line_fluxes.append(He_line_flux)
         #ax3.plot(wvln, spec, label = i)
         
-    
+
 final_table = []
 
 for i in file_num:
@@ -1249,35 +1300,72 @@ for i in file_num:
     num_of_files = len(obj_files)
     
     reduced_table = np.array(table_list)[same_obj]
+    reduced_He_lines = np.array(HeI_line_fluxes)[same_obj]
     
     if num_of_files == 1:
         final_table.append(reduced_table[0])
     
     if num_of_files == 2:
         
+        He1 = np.round(reduced_He_lines[0] + reduced_He_lines[1], 2)
+        
+        table_He = Table()
+        
+        table_He['line_name'] = HeI_name
+        table_He['line_flux'] = He1
+        table_He['rest_frame_wavelength'] = He_lines
+        
+        
         table1 = reduced_table[0]
         table2 = reduced_table[1]
         
-        master_table = vstack([table1, table2])
+        master_table = vstack([table1, table2, table_He])
+        
+        
         
         final_table.append(master_table)
 
 def line_ratio_analysis(master_table):
+    '''
+    This function will go through the data and calculate all the line ratios that we are interested. 
+    These include OIII/Hbeta, NII/Halpha, SII 6716/6730
+    
+    Parameters
+    -------------------
+    
+    master_table: Table values that include all the emission lines from a file
+                  Needs to have the line name une 'line_name' and flux under [line_flux]
+                
+    Outputs
+    -------------------
+    
+    The line ratios of the lines we care about
+    '''
+    
     #line flux is index three in the columns and we want the rows corresponding to
     #OIII5007, Hbeta, Halpha, [NII]6583
     
+    #initializing my variables to zero and will assign them after criteria is met
+    #namely that the lines are there
     OIII5007 = 0
     Hbeta = 0
     NII6583 = 0
     Halpha = 0
+    
+    SII6716 = 0
+    SII6730 = 0
+    
+    HeI6678 = 0
+    HeI7065 = 0
     
     #OIII_finder = '[OIII]5007' in master_table['line_name']
     #NII_finder = '[NII]6583' in master_table['line_name']
     #Halpha_finder = 'Halpha' in master_table['line_name']
     #hbeta_finder = 'Hbeta' in master_table['line_name']
     
+    
     for i, val in enumerate(master_table['line_name']):
-        
+
         #looking for the row in the master table where this line is at
         if val == '[OIII]5007':
             #extracting the flux
@@ -1299,62 +1387,132 @@ def line_ratio_analysis(master_table):
             #extracting the flux
             #flux is at index three
             NII6583 = master_table[i][3]
+        
+        if val == 'HeI6678':
+            #extracting the flux
+            #flux is at index three
+            HeI6678 = master_table[i][3]
+        
+        if val == 'HeI7065':
+            #extracting the flux
+            #flux is at index three
+            HeI7065 = master_table[i][3]
             
+        if val == '[SII]6716':
+            #extracting the flux
+            #flux is at index three
+            SII6716 = master_table[i][3]
+        
+        if val == '[SII]6730':
+            #extracting the flux
+            #flux is at index three
+            SII6730 = master_table[i][3]
+    
+    ################################
+    #Helium Line Ratios
+    ################################
+    
+    #got this from the isotov paper im sure we will have to change this value up as it seems to be
+    #in the Temperature range 15000-20000K
+    HeI3889 = .107 * Hbeta
+    
+    He_7065_6678 =0
+    He_3889_6678 = 0
+    #calculating line ratio for helium
+    if HeI6678 == 0:
+        He_7065_6678 = -999
+        He_3889_6678 = -999
+        
+    else:   
+        He_7065_6678 = HeI7065/HeI6678
+        He_3889_6678 = HeI3889/HeI6678
+        
+    ################################
+    #Silicon Line Ratio
+    ################################
+    
+    if SII6730 == 0:
+        SII_6716_6730 = -999
+        
+    else:   
+        SII_6716_6730  = SII6716/SII6730 
+    
+    #########################################
+    #BPT Line Ratios: OIII/Hbeta, NII/Halpha
+    #########################################
+    
+    #calculating line ratios
     OIII_Hbeta = 0
     NII_Halpha = 0
     
+    #checking the different criterias and if not there then assign ratio -999
     if OIII5007 != 0 and Hbeta != 0 and NII6583 != 0 or Halpha != 0:
         
         OIII_Hbeta = OIII5007/Hbeta
         NII_Halpha = NII6583/Halpha
         
-        return round(OIII_Hbeta, 4), round(NII_Halpha, 4)
+        return round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4)
     
     if (OIII5007 != 0 and Hbeta != 0) and (NII6583 == 0 or Halpha == 0):
         
         OIII_Hbeta = OIII5007/Hbeta
-        NII_Halpha = -999999
+        NII_Halpha = -999
         
-        return round(OIII_Hbeta, 4), round(NII_Halpha, 4)
+        return round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4)
     
     if (OIII5007 == 0 or Hbeta == 0 )and (NII6583 != 0 and Halpha != 0):
         
-        OIII_Hbeta = -999999
+        OIII_Hbeta = -999
         NII_Halpha = NII6583/Halpha
         
-        return round(OIII_Hbeta, 4), round(NII_Halpha, 4)
-        
+        return round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4)
+
+#Lists that will hold the Emission Line Ratios    
 ratio_OIII_hbeta = []
 ratio_NII_halpha = []
+He_7065_6678 = []
+He_3889_6678 = []
+SII_6716_6730 = []
 
 for i in range(len(file_num)):
-    #print('File Number: ' + file_num[i])
     
-    OIII_Hbeta, NII_Halpha = line_ratio_analysis(final_table[i])
+    print('File Number: ' + file_num[i])
+    print(final_table[i])
+    #final_table[i].write(file_num[i]+'_lineinfo.fits', format='fits')
+    
+    #here HeI_1 is the ratio HeI 7065/6678 HeI_2 is the ratio HeI 3889/6678
+    #SII is the SII ratio between 6716 and 6730
+    OIII_Hbeta, NII_Halpha, HeI_1, HeI_2, SII = line_ratio_analysis(final_table[i])
     
     ratio_OIII_hbeta.append(OIII_Hbeta)
     ratio_NII_halpha.append(NII_Halpha)
+    He_7065_6678.append(HeI_1)
+    He_3889_6678.append(HeI_2)
+    SII_6716_6730.append(SII)
     
-    #print()
+    print()
 
     
     
+#creating table that will hold the emission lines for each galaxy object
+#Object name can be found in the ObjectID column
+
 ratio_table = Table()
 
 ratio_table['ObjectID']  = np.array(file_num)
-ratio_table['OIII_Hbeta_ratio'] = np.array(ratio_OIII_hbeta)
-ratio_table['NII_Halpha_ratio'] = np.array(ratio_NII_halpha)
-
-
+ratio_table['OIII5007/Hbeta'] = np.array(ratio_OIII_hbeta)
+ratio_table['NII6583/Halpha'] = np.array(ratio_NII_halpha)
+ratio_table['HeI 7065/6678'] = np.array(He_7065_6678)
+ratio_table['HeI 3889/6678'] = np.array(He_3889_6678)
+ratio_table['SII 6716/6730'] = np.array(SII_6716_6730)
 
 print(ratio_table)
 
-plotting_BPT(ratio_table)
+#plotting_BPT(ratio_table)
 
 end = time.time()
 
 print('Time of Program = ' + str(round((end-start)/60, 2)) + ' minutes!')
-
 
 '''
 #ax1.set_ylim(-2, 75)
@@ -1364,7 +1522,7 @@ print('Time of Program = ' + str(round((end-start)/60, 2)) + ' minutes!')
 #ax2.legend(loc='best')
 #ax3.legend(loc='best')
 #plt.show()    
-           
+       
 def gain_calculations(file_spec, file_sdss, z, line_lam):
     
     

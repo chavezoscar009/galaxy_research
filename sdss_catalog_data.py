@@ -63,19 +63,23 @@ def plotting_BPT(Table):
     
     filt = np.zeros(len(Table), dtype = bool)
 
-    for i, val in enumerate(Table['NII_Halpha_ratio']):
+    for i, val in enumerate(Table['NII6583/Halpha']):
         if val > 0:
             filt[i] = True
     
     new_table = Table[filt]
 
-    OIII_HB = new_table['OIII_Hbeta_ratio']
-    NII_HA = new_table['NII_Halpha_ratio']
+    OIII_HB = new_table['OIII5007/Hbeta']
+    NII_HA = new_table['NII6583/Halpha']
     obj = new_table['ObjectID']
     
     x = np.logspace(-2, 1.5, 1000)
     y = .61/(np.log10(x) - .47) + 1.19
     
+    filt = np.ones(len(x), dtype = bool)
+    ind = np.where(np.log10(x) > .4)
+    
+    filt[ind] = False
     
     plt.figure(figsize = (10,10))
     plt.title('BPT Diagram')
@@ -85,12 +89,12 @@ def plotting_BPT(Table):
     plt.ylim(-1.5, 2)
     
     plt.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4)
-    plt.plot(np.log10(x), y, 'r--', linewidth = .5)
+    plt.plot(np.log10(x)[filt], y[filt], 'r--', linewidth = 1)
     
     for i in range(len(OIII_HB)):
-        plt.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', markersize=10 ,label = obj[i])
+        plt.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', markersize=15 ,label = obj[i])
     
-    plt.legend(loc = 'best')
+    plt.legend(loc = 'best', frameon=False)
     plt.savefig('BPT_Diagram.pdf')
     plt.show()
 
