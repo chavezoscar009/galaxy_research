@@ -26,7 +26,7 @@ from specutils.analysis import equivalent_width
 from specutils.manipulation import extract_region  
 from astropy.table import Table, Column, vstack
 import time
-#from sdss_catalog_data import plotting_BPT
+from sdss_catalog_data import plotting_BPT
 
 start = time.time()
 
@@ -294,14 +294,15 @@ def fitting_gaussian(data, wavelength, filename, window):
     return renorm_y
     '''
 
-def fitting_lines(spectrum, mu_guess, sig_guess=4):
+def fitting_lines(spectrum, sig = 4):
     
     def f(x, A, mu, sig):
         return A * np.exp(-(x-mu)**2/(2*sig**2))
     
     try:
+        mu = np.mean(spectrum.spectral_axis.value)
         param, covar = curve_fit(f, spectrum.spectral_axis.value, spectrum.flux.value, 
-                                 p0 = [np.amax(spectrum.flux.value), mu_guess, sig_guess], bounds = [[0, spectrum.spectral_axis.value[0], 1],[np.amax(spectrum.flux.value), spectrum.spectral_axis.value[-1], 10]])
+                                 p0 = [np.amax(spectrum.flux.value), mu, sig])
         return param
     except RuntimeError:
         return np.array([-999,-999,-999])
@@ -586,7 +587,7 @@ def spectrum(file):
     #np.savez('spectra.npz', flux=gauss_added, wave = wvln_spec)
     
     return medfilt(gauss_added, kernel_size = 5), wvln_spec 
-
+'''
 def reshifting_wavelength(filename, wavelength):
     
     if 'mods1r' in filename:
@@ -634,7 +635,7 @@ def reshifting_wavelength(filename, wavelength):
         
     else:
         return wavelength    
-    
+'''    
 
 def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     
@@ -806,6 +807,9 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
 
 def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_name):
     
+    def f(x, A, mu, sig):
+        return A * np.exp(-(x-mu)**2/(2*sig**2))
+    
     spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, 
                               flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
     #sorting the data
@@ -855,7 +859,7 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
         
         #this calls a function which fits the sub region with a gaussian and we pass in the 
         #emission center from specutils as an initial guess
-        par = fitting_lines(sub_spectrum, i.value)
+        par = fitting_lines(sub_spectrum)
        
         ###############
         #using specutils tools to fit lines with gaussian
@@ -871,17 +875,19 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
         
         #making an x and y array for plotting, Used this for debugging purposes and check quality
         #of fit
-        #x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
+        x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
         #y_values from specutils fit
         #y_fit = g_fit(x)
         
-        #if par[1] < 0:
-        #    continue
+        if par[1] < 0:
+            continue
         
+        #plt.plot(sub_spectrum.spectral_axis, sub_spectrum.flux, alpha = .5)
+        #plt.plot(x.value, f(x.value, *par), label = 'Curve Fit')
         #plt.axvline(i.value, linewidth=.5, linestyle='--', color = 'red')
         #plt.axvline(par[1], linewidth=.5, linestyle='--', color = 'blue')
         
-        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
         
         curve_line.append(par[1])
         line_f.append(flux_line)
@@ -890,6 +896,10 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
     max_specutils_flux = np.array(lines_flux).argmax()
     max_gauss_flux = np.array(line_f).argmax()
     
+    #for i in range(len(line_f)):
+    #    print('%9.2f ----------- %9.2f ' %(line_f[i], curve_line[i]))
+    #    print('%9.2f ' %(lines_flux[i]))
+    #    print()
     test = 0
     
     if max_specutils_flux == max_gauss_flux:
@@ -904,16 +914,19 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
         delta_lambda = curve_line[max_gauss_flux] - OIII
         
         redshift = round(delta_lambda/OIII, 5)
+        #print(redshift)
     
     if 'mods1r' in filename:
         halpha = 6562.8
         
         delta_lambda = curve_line[max_gauss_flux] - halpha
         
-        redshift = delta_lambda/halpha
+        redshift = round(delta_lambda/halpha, 5)
+        #print(redshift)
     
+    '''
     #debugging code below to check if redshift is working
-    '''    
+   
     within_range = np.array([True if x*(1+redshift)>spectrum.spectral_axis.value[0] and x*(1+redshift)<spectrum.spectral_axis.value[-1] else False for x in line])
     #print(redshift)
     #print(within_range)
@@ -1077,12 +1090,12 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #plt.show()    
     
     line_center_index = []
-    print(filename)
+    #print(filename)
     for i in emission['line_center']:
        
         #making a window to look around the line center so that I can do some analysis using specutils
         #as well as my own homemade functions
-        window = 15*u.angstrom
+        window = 10*u.angstrom
         
         #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
         sub_region = SpectralRegion(i - window, i + window)
@@ -1096,7 +1109,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #essentially we will not be fitting the line and getting a flux value or EW
         #############
         
-        par = fitting_lines(sub_spectrum, i.value)
+        par = fitting_lines(sub_spectrum)
         #print(str(i.value/(1+z)) + ' --------- ' + str(par[1]/(1+z)))
         
         if par[1] < 0:
@@ -1133,7 +1146,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
                                         continuum=continuum_func(par[1]*u.angstrom)))
         
         #getting the flux of the line using scipy curve fit parameters
-        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
         
         #getting the equivalent width from flux calculation above
         manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom).value)
@@ -1186,7 +1199,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         
         #making a window to look around the line center so that I can do some analysis using specutils
         #as well as my own homemade functions
-        window = 10*u.angstrom
+        window = 8*u.angstrom
         
         if (val - window).value < spectrum.spectral_axis.value[0] or (val - window).value > spectrum.spectral_axis.value[-1]:
             continue
@@ -1203,10 +1216,10 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         
         #this calls a function which fits the sub region with a gaussian and we pass in the 
         #emission center from specutils as an initial guess
-        par = abs(fitting_lines(sub_spectrum, val.value))
+        par = abs(fitting_lines(sub_spectrum))
         
         #getting the flux of the line using scipy curve fit parameters
-        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
         #print(par)
         #print(flux_line)
         
@@ -1246,10 +1259,10 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         
         #this calls a function which fits the sub region with a gaussian and we pass in the 
         #emission center from specutils as an initial guess
-        par = fitting_lines(sub_spectrum, val.value)
+        par = fitting_lines(sub_spectrum)
         
         #getting the flux of the line using scipy curve fit parameters
-        flux_line = np.sqrt(2*np.pi)*par[0]*par[-1]
+        flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
         
         OIII_line_flux[i] = flux_line
     
@@ -1356,6 +1369,9 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #this gets the value of the difference at the index we got using curve fit line center
         diff = abs(line-(val/(1+z)))[index]
         
+        #plt.axvline(val/(1+z), linestyle = '--', color = 'red', linewidth = .5)
+        #plt.axvline(rest_l, linestyle = '-', color = 'blue', linewidth = .5)
+        
         if diff > 3:
             continue
             
@@ -1368,10 +1384,10 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
         #this finds the index of where the rest line is closest to in the emission lines that I got
         #this index can be used for equivalent width and flux 
-        ind = abs(rest_l*(1+z) - emission_line_fit).argmin()
+        ind = abs(rest_l - emission_line_fit/(1+z)).argmin()
         
-        if ind != i:
-            ind = i
+        #if ind != i:
+            #ind = i
 
         if rest_l in rest_line:
             continue
@@ -1380,8 +1396,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
             #print('%13s ----- %9.2f ------- %9.2f ------- %9.2f ------- %9.2f' %(rest_name, rest_l, val/(1+z), line_f[ind], manual_ew[ind]))
 
-            ind_catalog.append(index)
-            ind_calculation.append(ind)
+            #ind_catalog.append(index)
+            #ind_calculation.append(ind)
             
             #plt.axvline(rest_l, linestyle = '-', color = 'red', linewidth = .5)
             #plt.axvline(val/(1+z), linestyle = '-', color = 'blue', linewidth = .5)
@@ -1551,9 +1567,9 @@ for i in files:
         #print(z1)
         
         spec, wvln = spectrum(i)
-        wavelength = reshifting_wavelength(i, wvln)
+        #wavelength = reshifting_wavelength(i, wvln)
         
-        spectra, cont_func, filt, filt_z, std_dev, noise = fitting_continuum(wavelength, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt, filt_z, std_dev, noise = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         #spectra, cont_func, filt= fitting_continuum(wvlng, spec, z1, line_wavelength, i)
         
         percentile = 98
@@ -1564,8 +1580,8 @@ for i in files:
         #print(i)
         #print('-----------------------')
         #print()
-        spectroscopic_redshift = spec_redshift(spectra, wavelength, filt_z, line_wavelength, z1, 99, i, line_name)
-        table, HeI_name, He_lines, He_line_flux = analysis(spectra, wavelength, filt_z, line_wavelength, 
+        spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
+        table, HeI_name, He_lines, He_line_flux = analysis(spectra, wvln, filt_z, line_wavelength, 
                                                            spectroscopic_redshift, cont_func, percentile, line_name, 
                                                            i, seeing_t, conversion, std_dev, noise)
         
@@ -1592,12 +1608,12 @@ for i in files:
         
         #print(z1)
         spec, wvln = spectrum(i)
-        wavelength = reshifting_wavelength(i, wvln)
+        #wavelength = reshifting_wavelength(i, wvln)
         
-        spectra, cont_func, filt, filt_z, std_dev, noise = fitting_continuum(wavelength, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt, filt_z, std_dev, noise = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         #spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
-        spectroscopic_redshift = spec_redshift(spectra, wavelength, filt_z, line_wavelength, z1, 99, i, line_name)
+        spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
         
         percentile = 98
         
@@ -1605,14 +1621,14 @@ for i in files:
         #print('-----------------------')
         #print()
         
-        table, He_line_names, He_lines, He_line_flux = analysis(spectra, wavelength, filt_z, line_wavelength, 
+        table, He_line_names, He_lines, He_line_flux = analysis(spectra, wvln, filt_z, line_wavelength, 
                                                                 spectroscopic_redshift, cont_func, percentile, 
                                                                 line_name, i, seeing_t, conversion, std_dev, noise)
         
         table_list.append(table)
         HeI_line_fluxes.append(He_line_flux)
         #ax2.plot(wavelength, spec, label = i)
-    
+
     if 'mods1r' in i:
         
         #print(i)
@@ -1629,12 +1645,12 @@ for i in files:
         
         #print(z1)
         spec, wvln = spectrum(i)
-        wavelength = reshifting_wavelength(i, wvln)
+        #wavelength = reshifting_wavelength(i, wvln)
         
-        spectra, cont_func, filt, filt_z, std_dev, noise = fitting_continuum(wavelength, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt, filt_z, std_dev, noise = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         #spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
-        spectroscopic_redshift = spec_redshift(spectra, wavelength,filt_z, line_wavelength, z1, 99, i, line_name)
+        spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
         
         percentile = 98
         
@@ -1642,8 +1658,9 @@ for i in files:
         #print('-----------------------')
         #print()
         
-        table, He_line_names, He_lines, He_line_flux = analysis(spectra, wavelength, filt_z, line_wavelength, spectroscopic_redshift, 
-                                                                cont_func, percentile, line_name, i, seeing_t, conversion, std_dev, noise)
+        table, He_line_names, He_lines, He_line_flux = analysis(spectra, wvln, filt_z, line_wavelength, spectroscopic_redshift, 
+                                                                cont_func, percentile, line_name, i, seeing_t, conversion,
+                                                                std_dev, noise)
         
         table_list.append(table)
         HeI_line_fluxes.append(He_line_flux)
@@ -1721,19 +1738,19 @@ def line_ratio_analysis(master_table):
     
     #initializing my variables to zero and will assign them after criteria is met
     #namely that the lines are there
-    OIII5007 = 0
-    Hbeta = 0
-    NII6583 = 0
-    Halpha = 0
+    OIII5007 = -1
+    Hbeta = -1
+    NII6583 = -1
+    Halpha = -1
     
-    SII6716 = 0
-    SII6730 = 0
+    SII6716 = -1
+    SII6730 = -1
     
-    HeI6678 = 0
-    HeI7065 = 0
+    HeI6678 = -1
+    HeI7065 = -1
     
-    OIII3725 = 0
-    OIII3727 = 0
+    OIII3725 = -1
+    OIII3727 = -1
     
     #OIII_finder = '[OIII]5007' in master_table['line_name']
     #NII_finder = '[NII]6583' in master_table['line_name']
@@ -1798,15 +1815,17 @@ def line_ratio_analysis(master_table):
     #Helium Line Ratios
     ################################
     
+    #print('NII6583: ', NII6583)
+    #print('Halpha: ', Halpha)
     #got this from the isotov paper im sure we will have to change this value up as it seems to be
     #in the Temperature range 15000-20000K
     HeI3889 = .107 * Hbeta
     
-    He_7065_6678 =0
-    He_3889_6678 = 0
+    He_7065_6678 =-1
+    He_3889_6678 = -1
     
     #calculating line ratio for helium
-    if HeI6678 == 0:
+    if HeI6678 < 0:
         He_7065_6678 = -999
         He_3889_6678 = -999
         
@@ -1818,7 +1837,7 @@ def line_ratio_analysis(master_table):
     #Silicon Line Ratio
     ################################
     
-    if SII6730 == 0:
+    if SII6730 < 0:
         SII_6716_6730 = -999
         
     else:   
@@ -1831,10 +1850,10 @@ def line_ratio_analysis(master_table):
     OIII_5007_3727 = -999
     OIII_5007_3725 = -999
     
-    if OIII3727 != 0:
+    if OIII3727 > 0:
         OIII_5007_3727 = OIII5007/OIII3727
     
-    if OIII3725 != 0:
+    if OIII3725 > 0:
         OIII_5007_3725 = OIII5007/OIII3725    
     
     #########################################
@@ -1846,22 +1865,22 @@ def line_ratio_analysis(master_table):
     NII_Halpha = 0
     
     #checking the different criterias and if not there then assign ratio -999
-    if OIII5007 != 0 and Hbeta != 0 and NII6583 != 0 or Halpha != 0:
-        
+    if OIII5007 > 0 and Hbeta > 0 and NII6583 > 0 and Halpha > 0:
+        #print('All Good')
         OIII_Hbeta = OIII5007/Hbeta
         NII_Halpha = NII6583/Halpha
         
         return [round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4), round(OIII_5007_3725, 4), round(OIII_5007_3727, 4)]
     
-    if (OIII5007 != 0 and Hbeta != 0) and (NII6583 == 0 or Halpha == 0):
-        
+    if (OIII5007 > 0 and Hbeta > 0) and (NII6583 < 0 or Halpha < 0):
+        #print('OIII_Hbeta Good')
         OIII_Hbeta = OIII5007/Hbeta
         NII_Halpha = -999
         
         return [round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4), round(OIII_5007_3725, 4), round(OIII_5007_3727, 4)]
     
-    if (OIII5007 == 0 or Hbeta == 0 )and (NII6583 != 0 and Halpha != 0):
-        
+    if (OIII5007 < 0 or Hbeta < 0 )and (NII6583 > 0 and Halpha > 0):
+        #print('Halpha_NII Good')
         OIII_Hbeta = -999
         NII_Halpha = NII6583/Halpha
         
@@ -1878,8 +1897,8 @@ OIII_5007_3727 = []
 
 for i in range(len(file_num)):
     
-    print('File Number: ' + file_num[i])
-    print(final_table[i])
+    #print('File Number: ' + file_num[i])
+    #print(final_table[i])
     #final_table[i].write(file_num[i]+'_lineinfo.fits', format='fits')
     
     #here HeI_1 is the ratio HeI 7065/6678 HeI_2 is the ratio HeI 3889/6678
@@ -1894,7 +1913,7 @@ for i in range(len(file_num)):
     OIII_5007_3725.append(ratio[5])
     OIII_5007_3727.append(ratio[6])
     
-    print()
+    #print()
 
     
     
@@ -1912,7 +1931,7 @@ ratio_table['SII 6716/6730'] = np.array(SII_6716_6730)
 
 print(ratio_table)
 
-#plotting_BPT(ratio_table)
+plotting_BPT(ratio_table)
 
 end = time.time()
 
