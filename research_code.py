@@ -411,31 +411,8 @@ def extraction_error(data, trace_center, window, filename, wavelength, gauss_mul
 
 def spec_error(spectras):
     
-    subset_of_spec = spectras[2::4]
+    return np.std(spectras, axis = 0)
     
-    consecutive_specs = spectras[7:14]
-    
-    center_trace = consecutive_specs[3]
-    
-    nrow = 5
-    ncol = 1
-    #fig, axs = plt.subplots(nrow, ncol, figsize = (14, 10))
-    #for i, ax in enumerate(fig.axes):
-    #    ax.plot(subset_of_spec[i])
-    #fig.tight_layout 
-    #plt.show()
-    
-    #nrow = 11
-    #ncol = 2
-    #fig, axs = plt.subplots(nrow, ncol, figsize = (14, 10), sharex=True, sharey=True,  constrained_layout=True)
-    #y = np.zeros(len(center_trace))
-    #for i, ax in enumerate(fig.axes):
-    #    if i == len(spectras):
-    #        continue
-    #    ax.plot(spectras[i]-center_trace, 'k', alpha = .5)
-    #    ax.plot(y, 'y-')
-    #    ax.set_ylim(-5, 5)
-    #plt.show()
 
 def spectrum(file):
     
@@ -588,7 +565,7 @@ def spectrum(file):
     spec1D_dist = extraction_error(data, row_spectrum, window, file, wvln_spec, gauss_mult)
     
     #gets the error for the spectrum extraction
-    spec_error(spec1D_dist)
+    spec_dist = spec_error(spec1D_dist)
     
     #this is the gaussian filtered data set after getting multiplied by the gaussian along the trace
     gauss_filtered = (boxed_data.T * gauss_mult).T
@@ -625,7 +602,7 @@ def spectrum(file):
     
     #np.savez('spectra.npz', flux=gauss_added, wave = wvln_spec)
     
-    return medfilt(gauss_added, kernel_size = 5), wvln_spec 
+    return medfilt(gauss_added, kernel_size = 5), wvln_spec, spec_dist 
   
 
 def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
@@ -1033,7 +1010,10 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #intializing threshold to zero but we will append to it later for each file that gets passed through
     threshold = 0
     
-    #i notcied that some files did not line up nicely to some lines and so i put custom thresholds for the following files
+    
+    '''
+    #I noticed that some files did not line up nicely to some lines and so i put custom thresholds for the following files, However this was fixed by finding the correct spectroscopic redshift for the galaxies and
+    I do not need this anymore
     if 'mods1r' in filename:
 
         if 'J073149+404513' in filename:
@@ -1055,20 +1035,24 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         threshold = 1.5
     
     else:    
-    
-        #sorting the data
-        data = np.sort(flux[filt])
-
-        #making the threshold for the flux to be above a percentile value
-        threshold = np.percentile(data, q=percentile, interpolation='midpoint')
-    
     '''
     
+    #sorting the data
+    data = np.sort(flux[filt])
+
+    #making the threshold for the flux to be above a percentile value
+    threshold = np.percentile(data, q=percentile, interpolation='midpoint')
+    
+    '''
+    Testing which threshold limit would work best to caputre most of the emission lines
+    
+    #made a threshold variable corresponding to 99 percentile all the way to 94 percentile
     threshold_limit_test = np.array([99, 98, 97, 96, 95, 94])
     
     plt.figure(figsize = (14, 6))
     plt.plot(spectrum.spectral_axis, spectrum.flux, 'b-')
     
+    #for loop that loops through all the threshold percentiles to 
     for i, val in enumerate(threshold_limit_test):
         
         data = np.sort(flux[filt])
@@ -1490,7 +1474,117 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #print(t)
     #print()
     
-    return t, He_line_names, He_lines.value/(1+z), He_line_flux
+    return t, He_line_names, He_lines.value/(1+z), He_line_flux, np.array(line_center)
+
+
+def Monte_Carlo(wavelength, flux, filt, z, distribution, line_center):
+    
+    
+    #making a gaussian function so that i can use curve_fit later to fit emission lines
+    def f(x, A, mu, sig):
+        return A * np.exp(-(x-mu)**2/(2*sig**2))
+    
+    
+    new_flux = np.random.normal(loc = flux[filt], scale = distribution[filt])
+    
+    #making a spectrum object
+    spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, 
+                              flux =new_flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+
+
+    #has the emission lines found by specutils
+    #emission_lines = []
+
+    #finds the line center using scipy curve fit
+    emission_line_fit = []
+
+    #has the line fluxes caluclated by specutils
+    lines_flux = []
+
+    #has equivalent widths calculated using specutils ew function
+    e_width = []
+
+    #this has the ew width from me calculating it myself
+    manual_ew = []
+
+    #this obtains the line flux calculated manually using sqrt(2 pi)*A*sigma
+    line_f= []
+
+    #this holds the value of the continuum at the peak of the emission line
+    continuum_val = []
+
+    #for loop that goes through each of the emission lines and does flux and equivalent width analysis
+    for i in line_center:
+
+        #making a window to look around the line center so that I can do some analysis using specutils
+        #as well as my own homemade functions
+        window = 10*u.angstrom
+
+        #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
+        sub_region = SpectralRegion(i*u.angstrom - window, i*u.angstrom + window)
+        sub_spectrum = extract_region(spectrum, sub_region)
+
+        #this calls a function which fits the sub region with a gaussian
+        par = fitting_lines(sub_spectrum)
+
+        #############
+        #Note that if for some reason a gaussian cannot be fit it will return values of [-999, -999, -999] and we do not want those so we can omit these
+        #essentially we will not be fitting the line and getting a flux value or EW
+        #############
+
+        #checks to make sure fit worked if not it skips it
+        if par[1] < 0:
+            continue
+
+        #calculating the emission line of the sub_region
+        lines_flux.append(line_flux(sub_spectrum))
+
+        #appending the emission line center
+        #emission_lines.append(i.value)
+
+        ###############
+        #using specutils tools to fit lines with gaussian
+        ###############
+
+        #getting an initial guess on the Gaussian parameters
+        param = estimate_line_parameters(sub_spectrum, models.Gaussian1D())
+
+        #making an intial guess of the gaussian
+        g_init = models.Gaussian1D(amplitude=param.amplitude, mean=param.mean, stddev=param.stddev)
+
+        #fitting the emission line to the gaussian using values from above
+        g_fit = fit_lines(spectrum, g_init)
+
+        #making an x and y array for plotting, Used this for debugging purposes and check quality
+        #of fit
+        x = np.linspace(sub_spectrum.spectral_axis[0].value, sub_spectrum.spectral_axis[-1].value, 1000)*u.angstrom
+
+        #y_values from specutils fit
+        y_fit = g_fit(x)
+
+        #y_values from curve_fit fit
+        y_curve = f(x.value, *par)
+
+        #getting the equivalent width of the subregion using specutils function
+        e_width.append(equivalent_width(sub_spectrum,
+                                        continuum=continuum_func(par[1]*u.angstrom)))
+
+        #getting the flux of the line using scipy curve fit parameters
+        flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
+
+        #getting the equivalent width from flux calculation above
+        manual_ew.append(flux_line/continuum_func(par[1]*u.angstrom).value)
+
+        #getting the center of the emission peak from curve_fit and appending it
+        emission_line_fit.append(par[1])
+
+        #line_center_index.append(abs(spectrum.spectral_axis.value - par[1]).argmin()) 
+
+        #appending the manual flux calculations
+        line_f.append(flux_line)
+
+        #appending the continuum value
+        continuum_val.append(continuum_func(par[1]*u.angstrom))
     
     '''
     #print('Emission Line ------ Emission Fit------ ew_spec ------- ew_manual ------- flux_spec ------ manual_flux ------- continuum val')
@@ -1646,8 +1740,8 @@ for i in files:
         #assigns the percentile to 97
         percentile = 97
         
-        if 'J231903+010853' in i:
-            percentile = 99
+        #if 'J231903+010853' in i:
+        #    percentile = 99
         
         #print(i)
         #print('-----------------------')
@@ -2045,7 +2139,32 @@ def line_ratio_analysis(master_table):
         OIII_Hbeta = -999
         NII_Halpha = NII6583/Halpha
         
-    return [round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4), round(OIII5007_OII3725, 4), round(OIII5007_OII3727, 4), round(T, 2)]
+        
+    ###############################
+    #getting R32 Value
+    ###############################
+    
+    R32 = -1
+    
+    if OIII5007 > 0 and OII3727 > 0 and OIII4959 > 0 and Hbeta > 0:
+        R32 = (OII3727 + OIII5007 + OIII4959)/ Hbeta
+    else:
+        R32 = -999
+        
+    ##############################
+    #Metallicity Estimation
+    ##############################
+    
+    Metal = -1
+    
+    if OII3727 > 0 and Halpha > 0 and NII6583 > 0:
+        Metal = OII3727/(Halpha + NII6583)
+    elif OII3725 > 0 and Halpha > 0 and NII6583 > 0:
+        Metal = OII3725/(Halpha + NII6583)
+    else:
+        Metal = -999
+        
+    return [round(OIII_Hbeta, 4), round(NII_Halpha, 4), round(He_7065_6678, 4), round(He_3889_6678, 4), round(SII_6716_6730, 4), round(OIII5007_OII3725, 4), round(OIII5007_OII3727, 4), round(T, 2), round(R32, 4), round(Metal, 4)]
 
 #Lists that will hold the Emission Line Ratios    
 ratio_OIII_hbeta = []
@@ -2056,6 +2175,8 @@ SII_6716_6730 = []
 OIII_5007_3725 = []
 OIII_5007_3727 = []
 Temperature = []
+R32 = []
+Metallicity = []
 
 for i in range(len(file_num)):
     
@@ -2075,6 +2196,8 @@ for i in range(len(file_num)):
     OIII_5007_3725.append(ratio[5])
     OIII_5007_3727.append(ratio[6])
     Temperature.append(ratio[7])
+    R32.append(ratio[8])
+    Metallicity.append(ratio[9])
     print()
 
     
@@ -2093,6 +2216,8 @@ ratio_table['SII 6716/6730'] = np.array(SII_6716_6730)
 ratio_table['OIII5007/OII3725'] = np.array(OIII_5007_3725)
 ratio_table['OIII5007/OII3727'] = np.array(OIII_5007_3727)
 ratio_table['Temperature'] = np.array(Temperature)
+ratio_table['R32'] = np.array(R32)
+ratio_table['Metallicity'] = np.array(Metallicity)
 
 print(ratio_table)
 
