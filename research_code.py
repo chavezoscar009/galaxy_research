@@ -31,7 +31,7 @@ import time
 start = time.time()
 
 #grabbing all of micaela's fits files from the current directory
-files = [x for x in glob.glob('*.fits') if 'SDSS' not in x and 'galSpec' not in x]
+files = [x for x in glob.glob('*.fits') if 'SDSS' not in x and 'galSpec' not in x and 'ce' in x]
 
 file_num = np.unique([x.split('_')[1] for x in files])
 
@@ -41,6 +41,7 @@ file_num = np.unique([x.split('_')[1] for x in files])
 
 
 
+'''
 #reading in the dat file
 ID, redshift, see = np.genfromtxt('targets.dat', usecols=(0,1, 8), unpack = True, skip_header=2, dtype = 'str')
 
@@ -65,6 +66,44 @@ line_info = np.genfromtxt('linelist.dat', unpack =True, dtype='str', usecols=(0,
 
 line_wavelength = line_info[0].astype(float)
 line_name = line_info[1]
+'''
+
+def target_data(filename):
+    
+    
+    ID, redshift, see = np.genfromtxt(filename, usecols=(0,1, 8), unpack = True, skip_header=2, dtype = 'str')
+
+    ID1 = [x.split('.')[0] for x in ID]
+
+    filt_z = np.zeros(len(ID1), dtype = bool)
+
+    for j, val in enumerate(ID1):
+        for i in file_num:
+            if val in i:
+                filt_z[j] = True 
+
+    z = redshift.astype(float)
+
+    ID_1 = np.array(ID1)[filt_z]
+    z_redshift = np.array(z)[filt_z]
+
+    seeing = np.array(see.astype(float))[filt_z]
+    
+    return ID_1, z_redshift, seeing
+
+def line_list(filename):
+    
+    line_info = np.genfromtxt(filename, unpack =True, dtype='str', usecols=(0,1), skip_header = 1)
+
+    line_wavelength = line_info[0].astype(float)
+    line_name = line_info[1]
+    
+    return line_wavelength, line_name
+
+
+
+ID_1, z_redshift, seeing = target_data('targets.dat')  
+line_wavelength, line_name = line_list('linelist.dat')
 
 
 def fitting_gaussian(data, wavelength, filename, window):
@@ -381,40 +420,97 @@ def finding_row_center(data):
     row_ind = mode(row_index)[0][0]
 
     return row_ind
+    
+def mask_for_SN(trace_center, window, data, file):
 
-def extraction_error(data, trace_center, window, filename, wavelength, gauss_mult, num):
-    
-    #making an array that will go from 5 below and 5 above the trace and try to extract a 1D spectrum at each increment
-    away_from_center = np.linspace(-num, num, (2*num) + 1)
-    
-    spec1D = []
-    
-    for i in away_from_center:
-        
-        start = int((trace_center + i) - window)
-        end = int((trace_center + i) + window)
-        
-        #print(type(start))
-        #print(type(end))
-        
-        data_one = data[start : end, :]
-        
-        #gauss_mult = fitting_gaussian(data_one, wavelength, filename, window)
-        
-        gauss_filtered = (data_one.T * gauss_mult).T
-    
-        gauss_added = np.sum(gauss_filtered, axis = 0)
-        
-        spec1D.append(gauss_added)
-        
-    return np.array(spec1D)
 
-def spec_error(spectras):
-    
-    return np.std(spectras, axis = 0)
-    
+    '''
+    This function will attempt to mask out the 2D spectrum. This means that we will get rid of those pesky bad pixels we see in the
+    2D spectrum and keep only the backgournd noise for S/N calculations. 
 
-def spectrum(file, z, line_lam, optimal_extraction):
+    Parameters
+    ------------------
+    trace_center: the center of my trace 
+    window: The window of 1D spectrum extraction 
+    data: The sky subtracted 2D spectrum  
+    file: filename used to assign the appropriate rows and columns filter
+
+    Output
+    ------------------
+    mask: boolean mask that will filter the 2D spectrum
+    '''
+    
+    #mask that will mask out bad pixels and our data
+    row_mask = np.ones(data.shape[0], dtype = bool)
+
+    if 'cem' in file:
+    
+        for i in range(len(data[:, 0])):
+
+            if i <= 30 or (194<= i <= 212) or (514<= i <= 531) or i >= 834:
+                row_mask[i] = False
+            
+            if trace_center - window < i < trace_center + window:
+                row_mask[i] = False
+        
+                
+        return row_mask
+    
+    if 'mods1b' in file:
+    
+        for i in range(len(data[:, 0])):
+
+            if i <= 348 or (838<= i <= 876) or (1365<= i <= 1403) or (1890<= i <= 1923) or (2415<= i <= 2455) or i >= 2947:
+                row_mask[i] = False
+                
+            if trace_center - window < i < trace_center + window:
+                row_mask[i] = False
+                
+                
+        return row_mask
+    
+    if 'mods1r' in file:
+    
+        for i in range(len(data[:, 0])):
+
+            if i <= 68 or (790<= i <= 826) or (1306<= i <= 1342) or (1818<= i <= 1854) or (2330<= i <= 2366) or i >= 2848:
+                row_mask[i] = False
+            
+            if trace_center - window < i < trace_center + window:
+                row_mask[i] = False
+                
+        
+        return row_mask
+
+def calculating_noise(filtered_data, window, gauss_filt):
+    
+    noise = []
+    
+    start = 0
+    end = len(gauss_filt)
+    
+    while True:
+        
+        n = filtered_data[start:end, :]
+        
+        noise_gauss_filtered = (n.T * gauss_filt).T
+        
+        added_noise = np.sum(noise_gauss_filtered, axis = 0)
+        
+        noise.append(added_noise)
+        
+        start = end + 1
+        end = start + len(gauss_filt)
+        
+        if start > filtered_data.shape[0] or end > filtered_data.shape[0]:
+            break
+    
+    print(len(noise))
+    noise_std = np.std(np.array(noise), axis = 0)
+    
+    return noise_std
+    
+def spectrum(file):
     
     '''
     This function will try to convert any 2D spectral array and convert that into a 1D array.
@@ -434,6 +530,13 @@ def spectrum(file, z, line_lam, optimal_extraction):
     
     #getting the header information here as this will be used below in the code to calculate the wavelength array
     hdr = fits.getheader(file)
+    
+    data_for_sky = 0
+    
+    if 'cem.fits' in file:
+        data_for_sky = fits.getdata(file[:-9]+file[-5:])
+    if 'ce.fits' in file:
+        data_for_sky = fits.getdata(file[:-8]+file[-5:])    
 
     '''
     #this is the cutting of the array were we get rid of the edges on all sides
@@ -474,7 +577,7 @@ def spectrum(file, z, line_lam, optimal_extraction):
         filt[:row_min, :] = np.zeros(len(data[0,:]))
         filt[row_max:, :] = np.zeros(len(data[0,:]))
         
-        window = 35
+        window = 40
     
     if 'b_ce.fits' in file:
 
@@ -488,10 +591,10 @@ def spectrum(file, z, line_lam, optimal_extraction):
             window = 40
     
         if 'J082540' in file:
-            window = 35
+            window = 40
         
         if 'J073149' in file:
-            window = 30
+            window = 35
             
     if 'r_ce.fits' in file:
 
@@ -505,7 +608,7 @@ def spectrum(file, z, line_lam, optimal_extraction):
             window = 40
     
         if 'J082540' in file:
-            window = 35
+            window = 40
         
         if 'J073149' in file:
             window = 40
@@ -515,166 +618,73 @@ def spectrum(file, z, line_lam, optimal_extraction):
     #plt.imshow(filt*data, cmap = 'gray', origin = 'lower', norm = LogNorm())
     #plt.show()
     
-
-    #declaring the cut_data array below, which is a simplified version of the data gathered above. It should only
-    #contain the spectrum with a box excluding any slit effects
-    #cut_data = data[row_min:row_max, column_min:column_max] 
-    
     #plt.figure(figsize = (14, 8))
     #plt.imshow(cut_data, origin = 'lower', cmap = 'gray',norm = LogNorm())
     #plt.show()
     
-    if not optimal_extraction: 
-        #This one calculates where in the original data array the correct row_index corresponding to the center of the spectrum lies
-        #We used a function called finding_row_center to find the row index of the masked data
-        row_spectrum = finding_row_center(data*filt)
+    #This one calculates where in the original data array the correct row_index corresponding to the center of the spectrum lies
+    #We used a function called finding_row_center to find the row index of the masked data
+    row_spectrum = finding_row_center(data*filt)
 
-        #y = row_spectrum * np.ones(len(data[0,:]))
-        #plt.figure(figsize = (10,10))
-        #plt.imshow(data*filt, origin = 'lower', norm = LogNorm(), cmap = 'gray')
-        #plt.plot(y)
-        #plt.show()
-
-        ########################################################
-        #Initial extraction
-        ########################################################
-
-        #given the row where spectrum is at we are looking at that row +/- windows
-        boxed_below = row_spectrum - window
-        boxed_above = row_spectrum + window
-
-        #getting the boxed data
-        boxed_data = data[boxed_below : boxed_above ,:]
-
-        #getting polynomial that transform from pixels to wavelength
-        p = get_wcs_solution(hdr)
-
-        #getting x and y values for the pixels
-        X, Y = np.meshgrid(range(len(data[0,:])), range(len(data[:,0])))
-
-        #wavelength array from the X and Y we put in
-        wvln_arr = p(X, Y)
-
-        #getting the spectrum wavelength and converting it to rest frame wavelengths
-        wvln_spec = wvln_arr[row_spectrum,:]
-
-        #just adding the boxed_data
-        adding_target = np.sum(boxed_data, axis = 0)
-
-        #this returns a gaussian fit to the spectrum so that more 
-        gauss_mult = fitting_gaussian(boxed_data, wvln_spec, file, window)
-        
-        #this is the gaussian filtered data set after getting multiplied by the gaussian along the trace
-        gauss_filtered = (boxed_data.T * gauss_mult).T
-
-        #adding the resulting array to get the 1D spectrum
-        gauss_added = np.sum(gauss_filtered, axis = 0)
-        
-        #this gets the distribution of spectrums as we move away from the trace
-        spec1D_dist = extraction_error(data, row_spectrum, window, file, wvln_spec, gauss_mult, 5)
-        
-        #plt.figure(figsize = (14, 6))
-        #plt.plot(wvln_spec, medfilt(gauss_added, kernel_size = 5))
-        #plt.show()
-        
-        return medfilt(gauss_added, kernel_size = 5), wvln_spec, spec1D_dist
+    #y = row_spectrum * np.ones(len(data[0,:]))
+    #plt.figure(figsize = (10,10))
+    #plt.imshow(data*filt, origin = 'lower', norm = LogNorm(), cmap = 'gray')
+    #plt.plot(y)
+    #plt.show()
     
-    if optimal_extraction:
-        
-        #This one calculates where in the original data array the correct row_index corresponding to the center of the spectrum lies
-        #We used a function called finding_row_center to find the row index of the masked data
-        row_spectrum = finding_row_center(data*filt)
+    ########################################################
+    #Extraction
+    ########################################################
 
-        #############################
-        #Testing the trace extraction
-        #----------------------------
-        #We test this by taking the row center I get and moving it up and down a certain amount
-        #extract a spectrum and then check the S/N of a certain line. We expect the S/N to drop off and
-        #there should be a maximum where the S/N is at its maximum and that is where the optimal extraction is at
-        #############################
+    #given the row where spectrum is at we are looking at that row +/- windows
+    boxed_below = row_spectrum - window
+    boxed_above = row_spectrum + window
 
-        ########################################################
-        #Initial extraction
-        ########################################################
+    #getting the boxed data
+    boxed_data = data[boxed_below : boxed_above ,:]
 
-        #given the row where spectrum is at we are looking at that row +/- windows
-        boxed_below = row_spectrum - window
-        boxed_above = row_spectrum + window
+    #getting polynomial that transform from pixels to wavelength
+    p = get_wcs_solution(hdr)
 
-        #getting the boxed data
-        boxed_data = data[boxed_below : boxed_above ,:]
+    #getting x and y values for the pixels
+    X, Y = np.meshgrid(range(len(data[0,:])), range(len(data[:,0])))
 
-        #getting polynomial that transform from pixels to wavelength
-        p = get_wcs_solution(hdr)
+    #wavelength array from the X and Y we put in
+    wvln_arr = p(X, Y)
 
-        #getting x and y values for the pixels
-        X, Y = np.meshgrid(range(len(data[0,:])), range(len(data[:,0])))
+    #getting the spectrum wavelength and converting it to rest frame wavelengths
+    wvln_spec = wvln_arr[row_spectrum,:]
 
-        #wavelength array from the X and Y we put in
-        wvln_arr = p(X, Y)
+    #just adding the boxed_data
+    adding_target = np.sum(boxed_data, axis = 0)
 
-        #getting the spectrum wavelength and converting it to rest frame wavelengths
-        wvln_spec = wvln_arr[row_spectrum,:]
+    #this returns a gaussian fit to the spectrum so that more 
+    gauss_mult = fitting_gaussian(boxed_data, wvln_spec, file, window)
+    
+    ######################
+    #Noise calculations
+    ######################
+    
+    row_mask = mask_for_SN(row_spectrum, window, data_for_sky, file)
+    
+    reduce1 = data_for_sky[row_mask]
+    
+    noise = calculating_noise(reduce1, window, gauss_mult)
+    #print('after Noise')
+    
+    #this is the gaussian filtered data set after getting multiplied by the gaussian along the trace
+    gauss_filtered = (boxed_data.T * gauss_mult).T
 
-        #this returns a gaussian fit to the spectrum  
-        gauss_mult = fitting_gaussian(boxed_data, wvln_spec, file, window)
-        
-        #this is the gaussian filtered data set after getting multiplied by the gaussian along the trace
-        #gauss_filtered = (boxed_data.T * gauss_mult).T
+    #adding the resulting array to get the 1D spectrum
+    gauss_added = np.sum(gauss_filtered, axis = 0)
 
-        #adding the resulting array to get the 1D spectrum
-        #gauss_added = np.sum(gauss_filtered, axis = 0)
-        
-        ########################################################
-        #Checking extraction
-        ########################################################
+    #plt.figure(figsize = (14, 6))
+    #plt.plot(wvln_spec, medfilt(gauss_added, kernel_size = 5))
+    #plt.show()
 
-        #this gets the distribution of spectrums as we move away from the trace
-        spec1D_dist = extraction_error(data, row_spectrum, window, file, wvln_spec, gauss_mult, 5)
-
-        #this is a check to see if our extraction window was optimal it returns the value shift we have to add to row center to get 
-        #the best trace center
-        row_shift = SN_calculation(spec1D_dist, wvln_spec, z, line_wavelength, file, 5)
-
-        ########################################################
-        #Once we have shifted the row center trace we repeat the coded block from above with this new center
-        #that is we reduced the original data to the new center +/- window
-        #we find the gaussian fit that best fits the trace data
-        #Get the spectrum distribution as we move away form the new center and we can get the Standard deviation of the distribution
-        ########################################################
-
-        ########################################################
-        #Final/Optimal Extraction
-        ########################################################
-
-        #making a new window for our data after shifting the trace center
-        boxed_below_shift = int((row_spectrum + row_shift) - window)
-        boxed_above_shift = int((row_spectrum + row_shift) + window)
-
-        #getting the boxed data after shifting extraction window
-        boxed_data_shifted = data[boxed_below_shift : boxed_above_shift ,:]
-
-        #this returns a gaussian fit to the spectrum so that more 
-        gauss_mult1 = fitting_gaussian(boxed_data_shifted, wvln_spec, file, window)
-
-        #this gets the distribution of spectrums as we move away from the trace
-        spec1d_dist = extraction_error(data, row_spectrum+row_shift, window, file, wvln_spec, gauss_mult1, 2)
-
-        SN_calculation(spec1d_dist, wvln_spec, z, line_wavelength, file, 2)
-
-        #gets the error for the spectrum extraction
-        spec_dist = spec_error(spec1d_dist)
-
-        #this is the gaussian filtered data set after getting multiplied by the gaussian along the trace
-        gauss_filtered = (boxed_data.T * gauss_mult).T
-
-        #adding the resulting array to get the 1D spectrum
-        gauss_added = np.sum(gauss_filtered, axis = 0)
-        #plt.figure(figsize = (14, 6))
-        #plt.plot(wvln_spec, medfilt(gauss_added, kernel_size = 5))
-        #plt.show()
-        
-        return medfilt(gauss_added, kernel_size = 5), wvln_spec, spec1d_dist
+    return medfilt(gauss_added, kernel_size = 5), wvln_spec, noise
+    
+    
     
     ''' 
     plt.figure(figsize = (10,10))
@@ -702,11 +712,6 @@ def spectrum(file, z, line_lam, optimal_extraction):
     
     plt.show()
     '''
-    
-    #np.savez('spectra.npz', flux=gauss_added, wave = wvln_spec)
-    
-    return medfilt(gauss_added, kernel_size = 5), wvln_spec, spec1D_dist 
-  
 
 def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     
@@ -839,6 +844,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     #this subtracts the continuum from the spectra
     continuum_subtracted_spec = medfilt(spectra-y_continuum.value, kernel_size = 5)
     
+    '''
     filt_wvln = wavelength_spec[filt]
     filt_flux = continuum_subtracted_spec[filt]
     
@@ -866,7 +872,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
         med_noise.append(med)
         wave.append(k*(1+z))
     
-    '''
+    
     #testing code by plotting
     fig = plt.figure(figsize=(14, 9))
     ax1 = fig.add_subplot(211)
@@ -903,7 +909,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     '''
     
     #returns a continuum subtracted spectrum, the continuum fit function, filt_noise, filt_z for the spec_redshift function, st
-    return continuum_subtracted_spec, continuum_fit, filt_noise, filt_z, np.array(std_dev), np.array(med_noise), filt, wave
+    return continuum_subtracted_spec, continuum_fit, filt_noise, filt_z
 
 def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_name):
     
@@ -963,7 +969,7 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
     
     #plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .5)
     #plt.title(filename[7:-5])
-    
+    #plt.show()
     #for loop that goes through all the emission lines that we specutils have found
     for i in emission['line_center']:
        
@@ -1029,6 +1035,8 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
         
         #get redhsift by taking that difference and dividing it by rest frame wavelength
         redshift = round(delta_lambda/OIII, 5)
+        
+        
         #print(redshift)
     
     if 'mods1r' in filename:
@@ -1041,7 +1049,25 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
         
         #caluclating the corresponding redshift
         redshift = round(delta_lambda/halpha, 5)
+        
+        ArIII = 7135 * (1+z)
+        
+        ind = abs(curve_line - ArIII).argmin()
+        
+        Ar_line = curve_line[ind]
+        
+        d_lam = Ar_line - 7135
+        
+        redshift2 = d_lam/7135
+        
+        #plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .5)
+        #plt.axvline(Ar_line, linestyle = '--')
+        #plt.axvline(curve_line[max_gauss_flux])
+        #plt.show()
+        
+        
         #print(redshift)
+        #print(redshift2)
     
     '''
     #debugging code below to check if redshift is working
@@ -1166,11 +1192,8 @@ def SN_calculation(spec_dist, wavelength, z, line_lam, filename, num):
     #plt.savefig('SN_'+filename[7:-5]+'.pdf')
     #plt.show()
     
-    row_shift = x[np.array(SN).argmax()]
     
-    return row_shift
-    
-def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion, line_noise, noise, distribution):
+def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion, noise):
     
     '''
     
@@ -1314,22 +1337,25 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #continuum_val = []
     
     #quick check to see if emission has all the emission lines
-    #plt.figure(figsize = (12, 6))
-    #plt.title('Checking Emission Lines')
-    #plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .5)
+    plt.figure(figsize = (12, 6))
+    plt.title('Checking Emission Lines')
+    plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .5)
     
-    #for i in emission['line_center'].value:
-    #    plt.axvline(i, linewidth = .5, linestyle= '--')
+    for i in emission['line_center'].value:
+        plt.axvline(i, linewidth = .5, linestyle= '--')
     
-    #plt.show()    
+    plt.show()    
     
     #plt.figure(figsize = (12, 6))
     #plt.title('Sub Spectrum and Fitting')
     
     #for loop that goes through each of the emission lines and does flux and equivalent width analysis
+    print('Before MC')
     for i in emission['line_center']:
         
-        emission_line_center, emission_line_center_err, manual_ew, manual_ew_err, manual_flux, manual_flux_err = Monte_Carlo(wavelength[filt], flux[filt], distribution[filt], 
+        emission_line_center, emission_line_center_err, manual_ew, manual_ew_err, manual_flux, manual_flux_err = Monte_Carlo(wavelength[filt],
+                                                                                                                             flux[filt], 
+                                                                                                                             noise[filt], 
                                                                                                                              i, continuum_func)
         line_center.append(emission_line_center)
         line_center_err.append(emission_line_center_err)
@@ -1439,7 +1465,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #print(line_center)
     #print(EW)
     #print(line_f)
-    #print('After MC')
+    print('After MC')
     
     He_line_names = np.array(['HeI3889', 'HeI6678', 'HeI7065'])
     He_lines = np.array([3889, 6678, 7065]) * (1+z)*u.angstrom
@@ -1486,7 +1512,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #if par[1]< 0:
             #continue
             
-        He_line_center, He_line_center_err, He_ew, He_ew_err, He_flux, He_flux_err = Monte_Carlo(wavelength[filt], flux[filt], distribution[filt], 
+        He_line_center, He_line_center_err, He_ew, He_ew_err, He_flux, He_flux_err = Monte_Carlo(wavelength[filt], flux[filt], noise[filt], 
                                                                                                                              val, continuum_func)
         
         He_lines_center[i] = He_line_center
@@ -1629,7 +1655,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     
     #the noise of the line
     #noise_ = []
-    SN = []
+    #SN = []
     #the standard deviation of the noise by the emission line
     #noise_std = []
 
@@ -1699,7 +1725,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
             flux_err.append(round(line_f_err[ind], 4))
             EW_.append(round(EW[ind], 4))
             Ew_err.append(round(EW_err[ind], 4))
-            SN.append(round(line_f[ind]/line_noise[index], 4))
+            #SN.append(round(line_f[ind]/line_noise[index], 4))
             #noise_.append(round(noise[index], 4))
             #noise_std.append(round(line_noise[index], 4))
             #print('%13s ----- %9.2f ------- %9.2f ------- %9.2f ------- %9.2f' %(rest_name, rest_l, val/(1+z[0]), line_f[ind], manual_ew[ind]))
@@ -1717,7 +1743,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     t['line_flux_err'] = np.array(flux_err)
     t['line_EW'] = np.array(EW_)
     t['Line_EW_err'] = np.array(Ew_err)
-    t['S/N'] = np.array(SN)
+    #t['S/N'] = np.array(SN)
     
     #t['line_noise'] = np.array(noise_)
     #t['line_noise_std_dev'] = np.array(noise_std)
@@ -1728,7 +1754,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     return t, [He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)]
 
 
-def Monte_Carlo(wavelength, flux, distribution, line_center, continuum_func):
+def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
     
     '''
     
@@ -1739,7 +1765,7 @@ def Monte_Carlo(wavelength, flux, distribution, line_center, continuum_func):
     ------------------------
     wavelength: This is the wavelength of the noise filtered spectrum
     flux: The flux of the spectrum with a noise filtered applied to get rid of noisy outer regions
-    distribution: This is the extraction standard deviation and shoul dbe in the form of a 1D array
+    distribution: This is the extraction standard deviation and should be in the form of a 1D array
     line_center: The line center that we will be calculating the line flux and EW
     continuum_func: The function used to get the continuum as this will be used to get the EW
     
@@ -1761,17 +1787,15 @@ def Monte_Carlo(wavelength, flux, distribution, line_center, continuum_func):
     dist_center = []
 
     counter = 0
-
-    while True:
-
-        new_flux = np.random.normal(loc = flux, scale = distribution)
-
+    
+    while counter <= 1000:
+        
+        new_flux = np.random.normal(flux, scale = noise)
+        
         #making a spectrum object
         spectrum = Spectrum1D(spectral_axis=wavelength*u.angstrom, 
                                   flux =new_flux*u.erg/u.s/u.cm/u.cm/u.angstrom)
 
-        #making a window to look around the line center so that I can do some analysis using specutils
-        #as well as my own homemade functions
         window = 10*u.angstrom
 
         #looking at the sub_region around where the line center is located at and +/- 15 Angstroms
@@ -1780,7 +1804,7 @@ def Monte_Carlo(wavelength, flux, distribution, line_center, continuum_func):
 
         #this calls a function which fits the sub region with a gaussian
         par = fitting_lines(sub_spectrum)
-
+        
         #############
         #Note that if for some reason a gaussian cannot be fit it will return values of [-999, -999, -999] and 
         #we do not want those so we can omit these
@@ -1809,17 +1833,17 @@ def Monte_Carlo(wavelength, flux, distribution, line_center, continuum_func):
         
         counter += 1
 
-        if counter == 1000:
-            break
+        #if counter == 1000:
+         #   break
     
-    emission_line_center = np.mean(dist_center)
-    emission_line_center_err = np.std(dist_center)
+    emission_line_center = np.nanmean(dist_center)
+    emission_line_center_err = np.nanstd(dist_center)
 
-    manual_ew = np.mean(dist_ew)
-    manual_ew_err = np.std(dist_ew)
+    manual_ew = np.nanmean(dist_ew)
+    manual_ew_err = np.nanstd(dist_ew)
 
-    manual_flux = np.mean(dist_flux)
-    manual_flux_err = np.std(dist_flux)
+    manual_flux = np.nanmean(dist_flux)
+    manual_flux_err = np.nanstd(dist_flux)
         
     return emission_line_center, emission_line_center_err, manual_ew, manual_ew_err, manual_flux, manual_flux_err
     
@@ -1837,32 +1861,72 @@ ax3 = fig.add_subplot(313)
 
 
 file = 'median_J231903+010853_cem.fits'
-sp1 = file.split('_')[1]
+sp1 = i.split('_')[1]
+        
+#using that ID to split it even further across the cross and gettin gthe first ID Number
 sp2 = sp1.split('+')[0]
 
+#we use this to match it with the ID we got from the catalog
 match = ID_1 == sp2
-#print(match)
-z1 = z_redshift[match]
 
-seeing_t = seeing[match]
+#print(match)
+#gets the redhsift from the catalog
+z1 = z_redshift[match][0]
+
+#gets the seeing from the catalog
+seeing_t = seeing[match][0]
+
+#conversion is dependent on the file passed in this is the conversion for the cem files
+#.188 arcsec/pixel
 
 conversion = .188
 #print(z1)
 
-spec, wvln = spectrum(file)
+#gets the 1D spectrum and wavelength
+spec, wvln, spec_dist = spectrum(i, z1, line_wavelength, False)
 
-spectra, cont_func, filt= fitting_continuum(wvln, spec, z1, line_wavelength, file)
-ind = np.where(wvln < 4500)
-ind2 = np.where(wvln > 6350)
-ind_tot = np.concatenate((ind, ind2), axis=None)
-filt[ind_tot] = False
-percentile = 99
+#print(len(spec_dist))
+
+#fits the continuum
+spectra, cont_func, filt_noise, filt_z, std_dev, noise, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+
+#plt.plot(wvln[filt_z], spec[filt_z], 'y-', alpha = .5, label = 'Non-Optimal')
+
+#assigns the percentile to 97
+percentile = 97
+
+#if 'J231903+010853' in i:
+#    percentile = 99
+
 #print(i)
 #print('-----------------------')
 #print()
-table, HeI_name, He_lines, He_line_flux = analysis(spectra, wvln, filt, line_wavelength, 
-                                                       z1, cont_func, percentile, line_name, 
-                                                       file, seeing_t, conversion)
+
+
+#gets the spectroscopic redshift
+spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
+
+spec1, wvln1, spec_dist1 = spectrum(i, spectroscopic_redshift, line_wavelength, True)
+spectra1, cont_func1, filt_noise, filt_z1, std_dev1, noise1, filt, wave = fitting_continuum(wvln1, spec1, 
+                                                                                            spectroscopic_redshift, line_wavelength, i)
+
+#plt.plot(wvln1[filt_z1], spec1[filt_z1], 'r--', label = 'Optimal')
+#plt.legend(loc = 'best')
+#plt.show()
+#SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
+
+extr_err = spec_error(spec_dist1)
+#print(len(spec_dist1))
+
+print(i)
+print('-----------------------')
+#print('Before Analysis')
+#gets the table along with the He_line calculations
+
+s = time.time()
+table, He_info  = analysis(spectra1, wvln1, filt_z1, line_wavelength, 
+                                                                   spectroscopic_redshift, cont_func1, percentile, line_name, 
+                                                                   i, seeing_t, conversion, std_dev1, noise1, extr_err)
 
 '''
 #fig = plt.figure(figsize = (16, 10))
@@ -1888,8 +1952,8 @@ He_lines = 0
 He_EW =[]
 He_EW_err =[]
 
-for i in files[:1]:
-    
+for i in files:
+    '''
     if 'cem.fits' in i:
         #plt.figure(figsize = (14, 7))
         #print(i)
@@ -1917,21 +1981,24 @@ for i in files[:1]:
         conversion = .188
         #print(z1)
         
-        #gets the 1D spectrum and wavelength
-        spec, wvln, spec_dist = spectrum(i, z1, line_wavelength, False)
+        #gets the 1D spectrum and wavelength along with noise and the wavelength corresponding to that noise
+        spec, wvln, noise = spectrum(i)
         
         #print(len(spec_dist))
         
         #fits the continuum
-        spectra, cont_func, filt_noise, filt_z, std_dev, noise, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
-        #plt.plot(wvln[filt_noise], spec[filt_noise], alpha = .5, label = 'Non-Optimal')
+        #plt.plot(wvln[filt_z], spec[filt_z], 'y-', alpha = .5, label = 'Non-Optimal')
         
         #assigns the percentile to 97
         percentile = 97
         
-        #if 'J231903+010853' in i:
-        #    percentile = 99
+        if 'J231903+010853' in i:
+            percentile = 98
+        
+        if 'J030903+003846' in i:
+            percentile = 98
         
         #print(i)
         #print('-----------------------')
@@ -1941,23 +2008,25 @@ for i in files[:1]:
         #gets the spectroscopic redshift
         spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
         
-        spec1, wvln1, spec_dist1 = spectrum(i, spectroscopic_redshift, line_wavelength, True)
-        spectra1, cont_func1, filt_noise, filt_z1, std_dev1, noise1, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
-        
-        #plt.plot(wvln[filt_noise], spec[filt_noise], label = 'Optimal')
+        #plt.plot(wvln1[filt_z1], spec1[filt_z1], 'r--', label = 'Optimal')
         #plt.legend(loc = 'best')
         #plt.show()
         #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
         
-        extr_err = spec_error(spec_dist1)
         #print(len(spec_dist1))
         
-        
+        print(i)
+        print('-----------------------')
+        #print('Before Analysis')
         #gets the table along with the He_line calculations
-        table, He_info  = analysis(spectra1, wvln1, filt_z1, line_wavelength, 
-                                                                           spectroscopic_redshift, cont_func1, percentile, line_name, 
-                                                                           i, seeing_t, conversion, std_dev1, noise1, extr_err)
         
+        s = time.time()
+        table, He_info  = analysis(spectra, wvln, filt_z, line_wavelength, 
+                                                                           spectroscopic_redshift, cont_func, percentile, line_name, 
+                                                                           i, seeing_t, conversion, noise)
+        e = time.time()
+        #print('Post Analysis')
+        print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
         #He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)
         
         HeI_name = He_info[0]
@@ -1976,11 +2045,11 @@ for i in files[:1]:
         He_EW_err.append(He_info[-1])
         
         #ax1.plot(wavelength, spec, label = i)
-        
+         
     if 'mods1b' in i:
         
-        #print(i)
-        #print('-------------')
+        print(i)
+        print('-------------')
         
         #splits up the filename by the underscore and getting the ID number
         sp1 = i.split('_')[1]
@@ -2003,10 +2072,10 @@ for i in files[:1]:
         conversion = .12
         
         #gets the 1D spectrum and wavelength
-        spec, wvln, spec_dist = spectrum(i, z1, line_wavelength, False)
+        spec, wvln,  noise = spectrum(i)
         
         #fits the continuum
-        spectra, cont_func, filt_noise, filt_z, std_dev, noise, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
         #plt.figure(figsize = (14, 7))
         #plt.plot(wvln[filt_noise], spec[filt_noise], alpha = .5, label = 'Non-Optimal')
@@ -2022,22 +2091,19 @@ for i in files[:1]:
         #print()
         #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
         
-        spec1, wvln1, spec_dist1 = spectrum(i, spectroscopic_redshift, line_wavelength, True)
-        spectra1, cont_func1, filt_noise, filt_z, std_dev1, noise1, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
-        
         
         #plt.plot(wvln[filt_noise], spec[filt_noise], label = 'Optimal')
         #plt.legend(loc = 'best')
         #plt.show()
         
-        extr_err = spec_error(spec_dist1)
-        
-        
+        s = time.time()
         #getting the table and He_1 lines
-        table, He_info = analysis(spectra1, wvln1, filt_z, line_wavelength, 
-                                                                            spectroscopic_redshift, cont_func1, percentile, 
-                                                                            line_name, i, seeing_t, conversion, std_dev1, noise1, extr_err)
+        table, He_info = analysis(spectra, wvln, filt_z, line_wavelength, 
+                                                                            spectroscopic_redshift, cont_func, percentile, 
+                                                                            line_name, i, seeing_t, conversion, noise)
         
+        e = time.time()
+        print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
         #appending table and HeI lines to lists above
         table_list.append(table)
         #HeI_line_fluxes.append(He_line_flux)
@@ -2058,7 +2124,7 @@ for i in files[:1]:
         
         He_EW.append(He_info[-2])
         He_EW_err.append(He_info[-1])
-        
+    '''
     if 'mods1r' in i:
         
         #print(i)
@@ -2083,41 +2149,38 @@ for i in files[:1]:
         conversion = .123
         
         #getting the 1D spectrum and wavelength
-        spec, wvln, spec_dist = spectrum(i, z1, line_wavelength, False)
+        spec, wvln, noise = spectrum(i)
 
         #fitting the continuum
-        spectra, cont_func, filt_noise, filt_z, std_dev, noise, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
         #plt.figure(figsize = (14, 7))
         #plt.plot(wvln[filt_noise], spec[filt_noise], alpha = .5, label = 'Non-Optimal')
         
         #getting the spectroscopic redshift
-        spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
+        spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 98, i, line_name)
         
         #assigning percentile
-        percentile = 97
+        percentile = 98
         
-        spec, wvln, spec_dist = spectrum(i, spectroscopic_redshift, line_wavelength, True)
-        spectra1, cont_func1, filt_noise, filt_z1, std_dev1, noise1, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
         #plt.plot(wvln[filt_noise], spec[filt_noise], label = 'Optimal')
         #plt.legend(loc = 'best')
         #plt.show()
         
-        extr_err = spec_error(spec_dist)
-        
-        #print(i)
-        #print('-----------------------')
+        print(i)
+        print('-----------------------')
         #print()
         
         #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
         
-        
+        s = time.time()
         #getting the table and HeI lines
-        table, He_info = analysis(spectra1, wvln1, filt_z1, line_wavelength, spectroscopic_redshift, 
-                                                                            cont_func1, percentile, line_name, i, seeing_t, conversion,
-                                                                            std_dev1, noise1, extr_err)
+        table, He_info = analysis(spectra, wvln, filt_z, line_wavelength, spectroscopic_redshift, 
+                                                                            cont_func, percentile, line_name, i, seeing_t, conversion, noise)
         
+        e = time.time()
+        print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
         #appending tabe and HeI lines to lists above
         table_list.append(table)
         
@@ -2139,7 +2202,7 @@ for i in files[:1]:
         
         He_EW.append(He_info[-2])
         He_EW_err.append(He_info[-1])
-        
+       
 #ax1.set_ylim(-2, 75)
 #ax2.set_ylim(-2, 75)
 #ax3.set_ylim(-2, 75)
