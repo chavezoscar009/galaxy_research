@@ -95,7 +95,7 @@ def target_data(filename):
 
 def line_list(filename):
     
-    line_info = np.genfromtxt(filename, unpack =True, dtype='str', usecols=(0,1), skip_header = 1)
+    line_info = np.genfromtxt(filename, unpack =True, dtype='str', skip_header = 2)
 
     line_wavelength = line_info[0].astype(float)
     line_name = line_info[1]
@@ -105,9 +105,20 @@ def line_list(filename):
 
 
 ID_1, z_redshift, seeing = target_data('targets.dat')  
-line_wavelength, line_name = line_list('linelist.dat')
+line_wavelength, line_name = line_list('spectrum_lines.txt')
 
-
+def calib_extraction(filename):
+    
+    if 'cem' in filename:
+        
+        wave, C, sig, sigcal, lorange, hirange = np.genfromtxt(filename[7:-9]+'_calib.dat', skip_header=2, unpack=True)
+        
+        return wave, C, sigcal
+    
+    if 'ce.fits' in filename:
+        wave, C, sig, sigcal, lorange, hirange = np.genfromtxt(filename[7:-15]+'_calib_'+filename[-14:-8]+'.dat', skip_header=2, unpack=True)
+        return wave, C, sigcal
+    
 def fitting_gaussian(data, wavelength, filename, window):
     
     '''
@@ -427,7 +438,7 @@ def finding_row_center(data):
 
     return row_ind
     
-def mask_for_SN(trace_center, window, data, file):
+def mask_for_SN(trace_center, data, file):
 
 
     '''
@@ -450,10 +461,12 @@ def mask_for_SN(trace_center, window, data, file):
     row_mask = np.ones(data.shape[0], dtype = bool)
 
     if 'cem' in file:
-    
+        
+        window = 50
+        
         for i in range(len(data[:, 0])):
 
-            if i <= 30 or (194<= i <= 212) or (514<= i <= 531) or i >= 834:
+            if i <= 30 or (194<= i <= 212) or (514<= i <= 531) or  (578 < i < 590) or (610 < i < 626) or i >= 834:
                 row_mask[i] = False
             
             if trace_center - window < i < trace_center + window:
@@ -463,26 +476,26 @@ def mask_for_SN(trace_center, window, data, file):
         return row_mask
     
     if 'mods1b' in file:
-    
+        window = 60
         for i in range(len(data[:, 0])):
 
             if i <= 348 or (838<= i <= 876) or (1365<= i <= 1403) or (1890<= i <= 1923) or (2415<= i <= 2455) or i >= 2947:
                 row_mask[i] = False
                 
-            if trace_center - window < i < trace_center + window:
+            if trace_center - window  < i < trace_center + window:
                 row_mask[i] = False
                 
                 
         return row_mask
     
     if 'mods1r' in file:
-    
+        window = 60
         for i in range(len(data[:, 0])):
 
             if i <= 68 or (790<= i <= 826) or (1306<= i <= 1342) or (1818<= i <= 1854) or (2330<= i <= 2366) or i >= 2848:
                 row_mask[i] = False
             
-            if trace_center - window < i < trace_center + window:
+            if trace_center - window < i < trace_center + window :
                 row_mask[i] = False
                 
         
@@ -515,7 +528,7 @@ def calculating_noise(filtered_data, window, gauss_filt, file):
         noise_std = np.std(np.array(noise[10:25]), axis = 0)
         return noise_std
     
-    print(len(noise))
+    #print(len(noise))
     
     noise_std = np.std(np.array(noise), axis = 0)
     
@@ -588,7 +601,7 @@ def spectrum(file):
         filt[:row_min, :] = np.zeros(len(data[0,:]))
         filt[row_max:, :] = np.zeros(len(data[0,:]))
         
-        window = 40
+        window = 45
     
     if 'b_ce.fits' in file:
 
@@ -599,13 +612,13 @@ def spectrum(file):
         filt[row_max:, :] = np.zeros(len(data[0,:]))
         
         if 'J021306' in file:
-            window = 40
+            window = 45
     
         if 'J082540' in file:
-            window = 40
+            window = 45
         
         if 'J073149' in file:
-            window = 35
+            window = 40
             
     if 'r_ce.fits' in file:
 
@@ -616,13 +629,13 @@ def spectrum(file):
         filt[row_max:, :] = np.zeros(len(data[0,:]))
         
         if 'J021306' in file:
-            window = 40
+            window = 45
     
         if 'J082540' in file:
-            window = 40
+            window = 45
         
         if 'J073149' in file:
-            window = 40
+            window = 45
     
     #print(file)
     #plt.figure(figsize = (10,10))
@@ -676,13 +689,17 @@ def spectrum(file):
     #Noise calculations
     ######################
     
-    row_mask = mask_for_SN(row_spectrum, window, data_for_sky, file)
+    row_mask = mask_for_SN(row_spectrum, data_for_sky, file)
     
     reduce1 = data_for_sky[row_mask]
     
+    #fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (10,10), sharex = True)
+    #ax1.imshow(reduce1, norm=LogNorm(), cmap = 'Greys', extent = [wvln_spec[0], wvln_spec[-1], 0, len(reduce1[:, 0])])
+   
     noise = calculating_noise(reduce1, window, gauss_mult, file)
     #print('after Noise')
-    
+    #ax2.plot(wvln_spec, noise)
+    #plt.show()
     #this is the gaussian filtered data set after getting multiplied by the gaussian along the trace
     gauss_filtered = (boxed_data.T * gauss_mult).T
 
@@ -693,7 +710,7 @@ def spectrum(file):
     #plt.plot(wvln_spec, medfilt(gauss_added, kernel_size = 5))
     #plt.show()
 
-    return medfilt(gauss_added, kernel_size = 5), wvln_spec, noise
+    return gauss_added, wvln_spec, noise
     
     
     
@@ -839,7 +856,8 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     ##############
     
     #making a specutils spectrum object from the filtered data
-    spectrum = Spectrum1D(spectral_axis=wavelength_spec[filt]*u.angstrom, flux = spectra[filt]* u.erg/u.s/u.cm/u.cm/u.angstrom)
+    smooth_flux = medfilt(spectra[filt], kernel_size = 17)
+    spectrum = Spectrum1D(spectral_axis=wavelength_spec[filt]*u.angstrom, flux = smooth_flux* u.erg/u.s/u.cm/u.cm/u.angstrom)
     
     #for i in range(len(line_lam)):
     #    print(' %10.2f -------------- %5.2f' %(line_lam[i], std_dev[i]))
@@ -853,7 +871,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     y_continuum = continuum_fit(wavelength_spec*u.angstrom)
     
     #this subtracts the continuum from the spectra
-    continuum_subtracted_spec = medfilt(spectra-y_continuum.value, kernel_size = 5)
+    continuum_subtracted_spec = spectra-y_continuum.value
     
     '''
     filt_wvln = wavelength_spec[filt]
@@ -941,7 +959,7 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
     
     Outputs
     ----------------------
-    The redshimfft for the galaxy found using spectroscopy
+    The redshift for the galaxy found using spectroscopy
     '''
     
     #inintializing the gauss function
@@ -950,7 +968,7 @@ def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_na
     
     #making a spectrum 1D object
     spectrum = Spectrum1D(spectral_axis=wavelength[filt]*u.angstrom, 
-                              flux =flux[filt]*u.erg/u.s/u.cm/u.cm/u.angstrom)
+                              flux =medfilt(flux[filt], kernel_size = 5)*u.erg/u.s/u.cm/u.cm/u.angstrom)
     
     #sorting the data to pass into np.percentile
     data = np.sort(flux[filt])
@@ -1204,7 +1222,7 @@ def SN_calculation(spec_dist, wavelength, z, line_lam, filename, num):
     #plt.show()
     
     
-def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion, noise):
+def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion, noise, just_noise):
     
     '''
     
@@ -1329,7 +1347,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     
     #finds the line center using scipy curve fit
     line_center = []
-    line_center_err = []
+    #line_center_err = []
     #has the line fluxes caluclated by specutils
     #lines_flux = []
     
@@ -1364,18 +1382,25 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     print('Before MC')
     
     SNoise = []
-    SNoise_err = []
+    #SNoise_err = []
+    
     for i in emission['line_center']:
+        #print('Before')
+        print(i)
         
-        emission_line_center, emission_line_center_err, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN, SN_err = Monte_Carlo(wavelength[filt],
+        emission_line_center, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN = Monte_Carlo(wavelength[filt],
                                                                                                                              flux[filt], 
                                                                                                                              noise[filt], 
-                                                                                                                             i, continuum_func)
-        if emission_line_center == -1:
+                                                                                                       i, continuum_func, just_noise)
+        
+        #print('After')
+        print(i)
+        #print()
+        if emission_line_center < 0:
             continue
             
         line_center.append(emission_line_center)
-        line_center_err.append(emission_line_center_err)
+        #line_center_err.append(emission_line_center_err)
         
         EW.append(manual_ew)
         EW_err.append(manual_ew_err)
@@ -1383,7 +1408,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         line_f.append(manual_flux)
         line_f_err.append(manual_flux_err)
         SNoise.append(SN)
-        SNoise_err.append(SN_err)
+        #SNoise_err.append(SN_err)
         
         '''
         #making a window to look around the line center so that I can do some analysis using specutils
@@ -1488,7 +1513,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     table['Line EW'] = np.array(EW)
     table['Line EW Error'] = np.array(EW_err)    
     table['Line S/N'] = np.array(SNoise)
-    table['Line S/N Error'] = np.array(SNoise_err)
+    #table['Line S/N Error'] = np.array(SNoise_err)
     
     #print(table)
     #plt.show()    
@@ -1504,13 +1529,14 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     He_line_flux_err = []
     
     He_lines_center = []
-    He_lines_center_err = []
+    #He_lines_center_err = []
     
     He_EW = []
     He_EW_err = []
     
     He_Sn = []
-    He_Sn_err = []
+    #He_Sn_err = []
+    
     #plt.figure(figsize = (14, 6))
     #plt.plot(spectrum.spectral_axis, spectrum.flux)
     He_table = Table()
@@ -1546,8 +1572,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         #if par[1]< 0:
             #continue
             
-        He_line_center, He_line_center_err, He_ew, He_ew_err, He_flux, He_flux_err, He_SN, He_SN_err = Monte_Carlo(wavelength[filt], flux[filt], noise[filt], 
-                                                                                                                             val, continuum_func)
+        He_line_center, He_ew, He_ew_err, He_flux, He_flux_err, He_SN = Monte_Carlo(wavelength[filt], flux[filt], noise[filt], 
+                                                                                                                             val, continuum_func, just_noise)
     
         '''
         He_table['Observed Line Center'] = np.array(He_line_center)
@@ -1560,7 +1586,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         
         '''
         He_lines_center.append(He_line_center)
-        He_lines_center_err.append(He_line_center_err)
+        #He_lines_center_err.append(He_line_center_err)
         
         He_line_flux.append(He_flux)
         He_line_flux_err.append(He_flux_err)
@@ -1569,7 +1595,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         He_EW_err.append(He_ew_err)
         
         He_Sn.append(He_SN)
-        He_Sn_err.append(He_SN_err)
+        #He_Sn_err.append(He_SN_err)
         
         
         
@@ -1587,7 +1613,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     He_table['Line EW'] = np.array(He_EW)
     He_table['Line EW Error'] = np.array(He_EW_err)    
     He_table['Line S/N'] = np.array(He_Sn)
-    He_table['Line S/N Error'] = np.array(He_Sn_err) 
+    #He_table['Line S/N Error'] = np.array(He_Sn_err) 
     
     '''
     #checking OIII line ratios
@@ -1807,15 +1833,77 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #t['line_noise'] = np.array(noise_)
     #t['line_noise_std_dev'] = np.array(noise_std)
     '''
-    print()
-    print('Combined Table')
-    print(t)
-    print()
+    #print()
+    #print('Combined Table')
+    #print(t)
+    #print()
+    return t#, [He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)]
+
+def name_matching(table, line_name, line_wavelength, z, filename):
     
-    return t, [He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)]
+    line_center = table['Observed Line Center']
+    name_list = []
+    
+    match_wave = []
+    for i, val in enumerate(line_center):
+        
+        ind = abs((val/(1+z)) - line_wavelength).argmin()
+        diff = abs((val/(1+z)) - line_wavelength[ind])
+        
+        check = (val/(1+z)) - line_wavelength[ind]
+        
+        #if check < 0 :
+            #name_list.append('---')
+        #else:    
+        if diff > 2.5:
+            name_list.append('---')
+            continue
 
-
-def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
+        name_list.append(line_name[ind])
+        match_wave.append(line_wavelength[ind])
+    
+    name = Column(np.array(name_list), name='Line Name')
+    table.add_column(name, index = 0)
+    
+    #print(table)
+    rounded_lines = np.round(line_center)
+    arr, ind = np.unique(rounded_lines, return_index=True)
+    
+    ind_array = np.arange(len(rounded_lines))
+    
+    row_removal = [x for x in ind_array if x not in ind]
+    
+    #print(table)
+    
+    if len(row_removal) != 0:
+    
+        table.remove_rows(row_removal)
+    
+    
+    #writing files for the objects
+    if 'cem' in filename:
+        table.write(filename[7:-9] + '_table.fits', format='ascii.fixed_width_two_line')
+        
+    if 'ce.fits' in filename:
+        table.write(filename[7:-8] + '_table.fits', format='ascii.fixed_width_two_line')
+    
+    '''
+    for i, val in enumerate(name_list):
+        if i == 0:
+            if val == name_list[i+1]:
+                
+        if i == len(name_list):
+            if val == name_list[i-1]:
+                
+        else:
+            if val == name_list[i-1] or val == name_list[i+1]
+    '''    
+    #name = Column(np.array(name_list), name='Line Name')
+    #table.add_column(name, index = 0)
+        
+    return table
+        
+def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise):
     
     '''
     
@@ -1848,28 +1936,43 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
     dist_flux = []
     dist_ew = []
     dist_center = []
-    SN_dist = []
+    SN = -999
     
     counter = 0
     bad_fit = 0
-    uncertainty = StdDevUncertainty(noise*u.erg/u.s/u.cm/u.cm/u.angstrom)
+    uncertainty = StdDevUncertainty(just_noise*u.erg/u.s/u.cm/u.cm/u.angstrom)
     
     while counter <= 1000:
-        
+        print(counter)
         new_flux = np.random.normal(flux, scale = noise)
         
         
         #making a spectrum object
         spectrum = Spectrum1D(spectral_axis=wavelength*u.angstrom, 
-                                  flux =new_flux*u.erg/u.s/u.cm/u.cm/u.angstrom, uncertainty=uncertainty)
+                                  flux =new_flux*u.erg/u.s/u.cm/u.cm/u.angstrom)
 
-        window = 8*u.angstrom
+        window = 6*u.angstrom
 
         #looking at the sub_region around where the line center is located at and +/- 10 Angstroms
+        if (i + window).value > spectrum.spectral_axis[-1].value:
+            return np.array([-999,-999,-999, -999, -999, -999])
+        if (i - window).value < spectrum.spectral_axis[0].value:    
+            return np.array([-999,-999,-999, -999, -999, -999])
+        
         sub_region = SpectralRegion(i - window, i + window)
         sub_spectrum = extract_region(spectrum, sub_region)
         
-        Sn = snr(sub_spectrum)
+        
+        
+        if counter == 0:
+            spectrum1 = Spectrum1D(spectral_axis=wavelength*u.angstrom, 
+                                  flux =flux*u.erg/u.s/u.cm/u.cm/u.angstrom, uncertainty=uncertainty)
+            window = 8*u.angstrom
+
+            #looking at the sub_region around where the line center is located at and +/- 10 Angstroms
+            sub_region1 = SpectralRegion(i - window, i + window)
+            sub_spectrum1 = extract_region(spectrum1, sub_region1)
+            SN = round(snr(sub_spectrum1).value, 2)
         
         #this calls a function which fits the sub region with a gaussian
         par = fitting_lines(sub_spectrum)
@@ -1879,18 +1982,18 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
         #we do not want those so we can omit these
         #essentially we will not be fitting the line and getting a flux value or EW
         #############
-
+        
+        #print(par[1])
         #checks to make sure fit worked if not it skips it
-        if par[1] == -1:
-            bad_fit += 1
-            
-            if bad_fit == 500:
-                return np.array([-1,-1,-1, -1, -1, -1, -1, -1])
             
         if par[1] < 0:
+            bad_fit += 1
+            counter += 1
+            if bad_fit > 700:
+                return np.array([-999,-999,-999, -999, -999, -999]) 
             continue
         
-        Sn = snr(sub_spectrum)
+        #Sn = snr(sub_spectrum)
         #getting the flux of the line using scipy curve fit parameters
         flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
 
@@ -1910,15 +2013,17 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
 
         dist_center.append(par[1])
         
-        SN_dist.append(Sn)
+        #SN_dist.append(Sn)
         
         counter += 1
 
         #if counter == 1000:
          #   break
-    #plt.show()
     
     
+    
+    if len(dist_center) == 0:
+        return -999 * np.ones(6)
     
     hist_center, bin_edges_center = np.histogram(dist_center, bins='auto')
     
@@ -1931,7 +2036,7 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
     
     hist_ew, bin_edges_ew = np.histogram(dist_ew, bins = 'auto')
     
-    hist_SN, bin_edges_SN = np.histogram(SN_dist, bins='auto')
+    #hist_SN, bin_edges_SN = np.histogram(SN_dist, bins='auto')
     
     #plt.hist(dist_ew, bins = len(bin_edges_ew))
     #plt.show()
@@ -1946,46 +2051,51 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
     bin_center_flux = .5 * (bin_edges_flux[1:] + bin_edges_flux[:-1])
     
     bin_center_ew = .5 * (bin_edges_ew[1:] + bin_edges_ew[:-1])
-    bin_center_SN = .5 * (bin_edges_SN[1:] + bin_edges_SN[:-1])
+    #bin_center_SN = .5 * (bin_edges_SN[1:] + bin_edges_SN[:-1])
     
     def f(x, A, mu, sig):
         return A * np.exp(-(x-mu)**2/(2*sig**2))
     
-    '''
-    emission_line_center = 0
-    emission_line_center_err = 0
+    
+    emission_line_center = -999
+    par_center = -999 * np.ones(3)
+    par_flux = -999 * np.ones(3)
+    par_ew = -999 * np.ones(3)
+    #par_SN = -999 * np.ones(3)
+    
     try:    
         par_center, cov = curve_fit(f, bin_center, hist_center, p0 = [np.amax(hist_center), bin_center[hist_center.argmax()], np.std(bin_center)])
         
         emission_line_center = round(par_center[1], 2) 
-        emission_line_center_err = round(par_center[-1], 4)
         
     except RuntimeError:
-        emission_line_center = line_center.value
+        emission_line_center = round(line_center.value, 2)
     
     try:    
         par_flux, cov = curve_fit(f, bin_center_flux, hist_flux, p0 = [np.amax(hist_flux), bin_center_flux[hist_flux.argmax()], np.std(bin_center_flux)])
         par_ew, cov = curve_fit(f, bin_center_ew, hist_ew, p0 = [np.amax(hist_ew), bin_center_ew[hist_ew.argmax()], np.std(bin_center_ew)])
-        par_SN, cov = curve_fit(f, bin_center_SN, hist_SN, p0 = [np.amax(hist_SN), bin_center_SN[hist_SN.argmax()], np.std(bin_center_SN)])
+        #par_SN, cov = curve_fit(f, bin_center_SN, hist_SN, p0 = [np.amax(hist_SN), bin_center_SN[hist_SN.argmax()], np.std(bin_center_SN)])
     
     except RuntimeError:
-        return -1*np.ones(8)
+        return -999*np.ones(6)
+    '''
+    try:
+        par_center, cov = curve_fit(f, bin_center, hist_center, p0 = [np.amax(hist_center), bin_center[hist_center.argmax()], np.std(bin_center)])
     '''
     
-    par_center, cov = curve_fit(f, bin_center, hist_center, p0 = [np.amax(hist_center), bin_center[hist_center.argmax()], np.std(bin_center)])
-    par_flux, cov = curve_fit(f, bin_center_flux, hist_flux, p0 = [np.amax(hist_flux), bin_center_flux[hist_flux.argmax()], np.std(bin_center_flux)])
-    par_ew, cov = curve_fit(f, bin_center_ew, hist_ew, p0 = [np.amax(hist_ew), bin_center_ew[hist_ew.argmax()], np.std(bin_center_ew)])
-    par_SN, cov = curve_fit(f, bin_center_SN, hist_SN, p0 = [np.amax(hist_SN), bin_center_SN[hist_SN.argmax()], np.std(bin_center_SN)])                                     
+    #par_flux, cov = curve_fit(f, bin_center_flux, hist_flux, p0 = [np.amax(hist_flux), bin_center_flux[hist_flux.argmax()], np.std(bin_center_flux)])
+    #par_ew, cov = curve_fit(f, bin_center_ew, hist_ew, p0 = [np.amax(hist_ew), bin_center_ew[hist_ew.argmax()], np.std(bin_center_ew)])
+    #par_SN, cov = curve_fit(f, bin_center_SN, hist_SN, p0 = [np.amax(hist_SN), bin_center_SN[hist_SN.argmax()], np.std(bin_center_SN)])                                     
     
     
-    emission_line_center = round(par_center[1], 2) 
-    emission_line_center_err = round(par_center[-1], 4) 
+    #emission_line_center = round(par_center[1], 2) 
+    #emission_line_center_err = round(par_center[-1], 4) 
     manual_ew = round(par_ew[1], 2) 
     manual_ew_err = round(par_ew[-1], 4) 
     manual_flux = round(par_flux[1], 2) 
     manual_flux_err = round(par_flux[-1], 4)
-    SN = round(par_SN[1], 2)
-    SN_err = round(par_SN[-1], 4)
+    #SN = round(par_SN[1], 2)
+    #SN_err = round(par_SN[-1], 4)
     
     '''
     emission_line_center = np.nanmean(dist_center)
@@ -1998,23 +2108,24 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func):
     manual_flux_err = np.nanstd(dist_flux)
     '''
     
-    return emission_line_center, emission_line_center_err, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN, SN_err
+    return emission_line_center, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN
     
-'''
+
 
 #file = 'median_J014707+135629_cem.fits'
 #file = 'median_J021306+005612_mods1b_ce.fits'
 #m, k = spectrum(file)
 
-fig = plt.figure(figsize = (16, 10))
-ax1 = fig.add_subplot(311)
-ax2 = fig.add_subplot(312)
-ax3 = fig.add_subplot(313)
+#fig = plt.figure(figsize = (16, 10))
+#ax1 = fig.add_subplot(311)
+#ax2 = fig.add_subplot(312)
+#ax3 = fig.add_subplot(313)
 
 
 
 file = 'median_J231903+010853_cem.fits'
-sp1 = i.split('_')[1]
+#file = 'median_J030903+003846_cem.fits'
+sp1 = file.split('_')[1]
         
 #using that ID to split it even further across the cross and gettin gthe first ID Number
 sp2 = sp1.split('+')[0]
@@ -2035,21 +2146,38 @@ seeing_t = seeing[match][0]
 conversion = .188
 #print(z1)
 
-#gets the 1D spectrum and wavelength
-spec, wvln, spec_dist = spectrum(i, z1, line_wavelength, False)
-
+#gets the 1D spectrum and wavelength along with noise and the wavelength corresponding to that noise
+spec, wvln, noise = spectrum(file)
+wave, C, sigcal = calib_extraction(file)
 #print(len(spec_dist))
 
+cal_interp = interp1d(wave, C, fill_value='extrapolate')
+cal_sigma_inter = interp1d(wave, sigcal, fill_value='extrapolate')
+
+cal_noise = noise * cal_interp(wvln)
+cal_err = cal_sigma_inter(wvln)
+
+#plt.figure(figsize = (14, 6))
+#plt.plot(wvln, cal_err, label = 'cal_err')
+#plt.plot(wvln, noise, label = 'Noise Error')
+#plt.legend(loc='best', frameon = False)
+#plt.show()
+
 #fits the continuum
-spectra, cont_func, filt_noise, filt_z, std_dev, noise, filt, wave = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, file)
 
 #plt.plot(wvln[filt_z], spec[filt_z], 'y-', alpha = .5, label = 'Non-Optimal')
 
 #assigns the percentile to 97
 percentile = 97
 
-#if 'J231903+010853' in i:
-#    percentile = 99
+#np.savez(i[7:-9], flux=spectra[filt_z], wavelength=wvln[filt_z])
+
+if 'J231903+010853' in file:
+    percentile = 98
+
+if 'J030903+003846' in file:
+    percentile = 98
 
 #print(i)
 #print('-----------------------')
@@ -2057,35 +2185,40 @@ percentile = 97
 
 
 #gets the spectroscopic redshift
-spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
-
-spec1, wvln1, spec_dist1 = spectrum(i, spectroscopic_redshift, line_wavelength, True)
-spectra1, cont_func1, filt_noise, filt_z1, std_dev1, noise1, filt, wave = fitting_continuum(wvln1, spec1, 
-                                                                                            spectroscopic_redshift, line_wavelength, i)
+spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, file, line_name)
 
 #plt.plot(wvln1[filt_z1], spec1[filt_z1], 'r--', label = 'Optimal')
 #plt.legend(loc = 'best')
 #plt.show()
 #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
 
-extr_err = spec_error(spec_dist1)
 #print(len(spec_dist1))
 
-print(i)
+print(file)
 print('-----------------------')
 #print('Before Analysis')
 #gets the table along with the He_line calculations
+total_err = np.sqrt(cal_noise**2 + cal_err**2)
 
 s = time.time()
-table, He_info  = analysis(spectra1, wvln1, filt_z1, line_wavelength, 
-                                                                   spectroscopic_redshift, cont_func1, percentile, line_name, 
-                                                                   i, seeing_t, conversion, std_dev1, noise1, extr_err)
+#table, He_info  = 
+table = analysis(spectra, wvln, filt_z, line_wavelength, 
+                                                                   spectroscopic_redshift, cont_func, percentile, line_name, 
+                                                                   file, seeing_t, conversion, total_err, noise)
+e = time.time()
 
-'''
+#print('Post Analysis')
+print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+
+new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, file)
+
+print(new_table)
+
 #fig = plt.figure(figsize = (16, 10))
 #ax1 = fig.add_subplot(311)
 #ax2 = fig.add_subplot(312)
 #ax3 = fig.add_subplot(313)
+
 
 #this list will hold the various tables for each file
 table_list = [] 
@@ -2104,8 +2237,8 @@ He_lines = 0
 
 He_EW =[]
 He_EW_err =[]
-
-for i in files[:3]:
+'''
+for i in files:
     
     if 'cem.fits' in i:
         #plt.figure(figsize = (14, 7))
@@ -2136,8 +2269,14 @@ for i in files[:3]:
         
         #gets the 1D spectrum and wavelength along with noise and the wavelength corresponding to that noise
         spec, wvln, noise = spectrum(i)
-        
+        wave, C, sigcal = calib_extraction(i)
         #print(len(spec_dist))
+        
+        cal_interp = interp1d(wave, C, fill_value='extrapolate')
+        cal_sigma_inter = interp1d(wave, sigcal, fill_value='extrapolate')
+        
+        cal_noise = noise * cal_interp(wvln)
+        cal_err = cal_sigma_inter(wvln)
         
         #fits the continuum
         spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
@@ -2147,7 +2286,7 @@ for i in files[:3]:
         #assigns the percentile to 97
         percentile = 97
         
-        np.savez(i[7:-9], flux=spectra[filt_z], wavelength=wvln[filt_z])
+        #np.savez(i[7:-9], flux=spectra[filt_z], wavelength=wvln[filt_z])
         
         if 'J231903+010853' in i:
             percentile = 98
@@ -2174,33 +2313,40 @@ for i in files[:3]:
         print('-----------------------')
         #print('Before Analysis')
         #gets the table along with the He_line calculations
+        total_err = np.sqrt(cal_noise**2 + cal_err**2)
         
-        s = time.time()
-        table, He_info  = analysis(spectra, wvln, filt_z, line_wavelength, 
+        #s = time.time()
+        #table, He_info  = 
+        table = analysis(spectra, wvln, filt_z, line_wavelength, 
                                                                            spectroscopic_redshift, cont_func, percentile, line_name, 
-                                                                           i, seeing_t, conversion, noise)
-        e = time.time()
+                                                                           i, seeing_t, conversion, total_err, noise)
+        #e = time.time()
+        
         #print('Post Analysis')
-        print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+        #print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+        
+        new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i)
+        
+        #print(new_table)
         #He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)
         
-        HeI_name = He_info[0]
-        He_lines = He_info[1]
+        #HeI_name = He_info[0]
+        #He_lines = He_info[1]
         
         #appends the table to the table list above
-        table_list.append(table)
+        #table_list.append(table)
         
         #appends the HeI lines to the list above
-        HeI_line_fluxes.append(He_info[2])
-        HeI_line_flux_err.append(He_info[3])
+        #HeI_line_fluxes.append(He_info[2])
+        #HeI_line_flux_err.append(He_info[3])
         
-        HeI_line_center.append(He_info[4])
+        #HeI_line_center.append(He_info[4])
         
-        He_EW.append(He_info[-2])
-        He_EW_err.append(He_info[-1])
+        #He_EW.append(He_info[-2])
+        #He_EW_err.append(He_info[-1])
         
         #ax1.plot(wavelength, spec, label = i)
-         
+        
     if 'mods1b' in i:
         
         print(i)
@@ -2245,42 +2391,53 @@ for i in files[:3]:
         #print('-----------------------')
         #print()
         #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
+        wave, C, sigcal = calib_extraction(i)
         
+        cal_interp = interp1d(wave, C, fill_value='extrapolate')
+        cal_sigma_inter = interp1d(wave, sigcal, fill_value='extrapolate')
         
+        cal_noise = noise * cal_interp(wvln)
+        cal_err = cal_sigma_inter(wvln)
+        
+        total_err = np.sqrt(cal_noise**2 + cal_err**2)
         #plt.plot(wvln[filt_noise], spec[filt_noise], label = 'Optimal')
         #plt.legend(loc = 'best')
         #plt.show()
         
-        np.savez(i[7:-8], flux=spectra[filt_z], wavelength=wvln[filt_z])
+        #np.savez(i[7:-8], flux=spectra[filt_z], wavelength=wvln[filt_z])
         
-        s = time.time()
+        #s = time.time()
         #getting the table and He_1 lines
-        table, He_info = analysis(spectra, wvln, filt_z, line_wavelength, 
+        #table, He_info = 
+        table = analysis(spectra, wvln, filt_z, line_wavelength, 
                                                                             spectroscopic_redshift, cont_func, percentile, 
-                                                                            line_name, i, seeing_t, conversion, noise)
+                                                                            line_name, i, seeing_t, conversion, total_err, noise)
         
-        e = time.time()
-        print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+        #e = time.time()
+        #print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+        
+        new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i)
+        #print(new_table)    
         #appending table and HeI lines to lists above
-        table_list.append(table)
+        #table_list.append(table)
         #HeI_line_fluxes.append(He_line_flux)
         #HeI_line_center.append(He_center)
         #ax2.plot(wavelength, spec, label = i)
         
-        HeI_name = He_info[0]
-        He_lines = He_info[1]
+        #HeI_name = He_info[0]
+        #He_lines = He_info[1]
         
         #appends the table to the table list above
-        table_list.append(table)
+        #table_list.append(table)
         
         #appends the HeI lines to the list above
-        HeI_line_fluxes.append(He_info[2])
-        HeI_line_flux_err.append(He_info[3])
+        #HeI_line_fluxes.append(He_info[2])
+        #HeI_line_flux_err.append(He_info[3])
         
-        HeI_line_center.append(He_info[4])
+        #HeI_line_center.append(He_info[4])
         
-        He_EW.append(He_info[-2])
-        He_EW_err.append(He_info[-1])
+        #He_EW.append(He_info[-2])
+        #He_EW_err.append(He_info[-1])
     
     if 'mods1r' in i:
         
@@ -2307,7 +2464,7 @@ for i in files[:3]:
         
         #getting the 1D spectrum and wavelength
         spec, wvln, noise = spectrum(i)
-
+        
         #fitting the continuum
         spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
         
@@ -2320,6 +2477,14 @@ for i in files[:3]:
         #assigning percentile
         percentile = 97
         
+        wave, C, sigcal = calib_extraction(i)
+        cal_interp = interp1d(wave, C, fill_value='extrapolate')
+        cal_sigma_inter = interp1d(wave, sigcal, fill_value='extrapolate')
+        
+        cal_noise = noise * cal_interp(wvln)
+        cal_err = cal_sigma_inter(wvln)
+        
+        total_err = np.sqrt(cal_noise**2 + cal_err**2)
         
         #plt.plot(wvln[filt_noise], spec[filt_noise], label = 'Optimal')
         #plt.legend(loc = 'best')
@@ -2331,37 +2496,41 @@ for i in files[:3]:
         
         #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
         
-        np.savez(i[7:-8], flux=spectra[filt_z], wavelength=wvln[filt_z])
+        #np.savez(i[7:-8], flux=spectra[filt_z], wavelength=wvln[filt_z])
         
-        s = time.time()
+        #s = time.time()
         #getting the table and HeI lines
-        table, He_info = analysis(spectra, wvln, filt_z, line_wavelength, spectroscopic_redshift, 
-                                                                            cont_func, percentile, line_name, i, seeing_t, conversion, noise)
+        #table, He_info = 
+        table = analysis(spectra, wvln, filt_z, line_wavelength, spectroscopic_redshift, 
+                                                                            cont_func, percentile, line_name, i, seeing_t, conversion, total_err, noise)
         
-        e = time.time()
-        print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+        #e = time.time()
+        #print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
+        
+        new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i)
+        #print(new_table)
         #appending tabe and HeI lines to lists above
-        table_list.append(table)
+        #table_list.append(table)
         
         #HeI_line_fluxes.append(He_line_flux)
         #HeI_line_center.append(He_center)
         #ax3.plot(wavelength, spec, label = i)
         
-        HeI_name = He_info[0]
-        He_lines = He_info[1]
+        #HeI_name = He_info[0]
+        #He_lines = He_info[1]
         
         #appends the table to the table list above
-        table_list.append(table)
+        #table_list.append(table)
         
         #appends the HeI lines to the list above
-        HeI_line_fluxes.append(He_info[2])
-        HeI_line_flux_err.append(He_info[3])
+        #HeI_line_fluxes.append(He_info[2])
+        #HeI_line_flux_err.append(He_info[3])
         
-        HeI_line_center.append(He_info[4])
+        #HeI_line_center.append(He_info[4])
         
-        He_EW.append(He_info[-2])
-        He_EW_err.append(He_info[-1])
-       
+        #He_EW.append(He_info[-2])
+        #He_EW_err.append(He_info[-1])
+
 #ax1.set_ylim(-2, 75)
 #ax2.set_ylim(-2, 75)
 #ax3.set_ylim(-2, 75)
@@ -2369,6 +2538,8 @@ for i in files[:3]:
 #ax2.legend(loc='best')
 #ax3.legend(loc='best')
 #plt.show()          
+'''
+table_files =np.array([x for x in glob.glob(*table.fits)])
 
 #list that will hold the final table for files looking at the same galaxy but 2 different 
 final_table = []
@@ -2392,8 +2563,12 @@ for i in file_num:
     #this holds the number of files in obj_files
     num_of_files = len(obj_files)
     
-    #reduced_table holds the tables of onl those of the same object
+    #reduced_table holds the files of only those of the same object
     reduced_table = np.array(table_list)[same_obj]
+    
+    #getting the tables files that are of the same object
+    reduced_files = table_files[same_obj]
+    
     
     #same with the HeI lines only those of the same object
     reduced_He_flux = np.array(HeI_line_fluxes)[same_obj]
@@ -2406,13 +2581,25 @@ for i in file_num:
     
     #if only one file then we append the table to the final table 
     if num_of_files == 1:
-    
+        file = reduced_files[0]    
+        t = Table.read(file, format='ascii.fixed_width_two_line')
+        t.write(file[:14]+'_finaltable.fits', format ='ascii.fixed_width_two_line')
         final_table.append(reduced_table[0])
         
     #if there is two then we got some work to do before appending
     if num_of_files == 2:
-        
+        file1 = reduced_files[0]
+        file2 = reduced_files[1]
         #first we add up the HeI lines because one file will have [val, 0, 0] and the other one will have [0, val, val]
+        
+        t1 = Table.read(file1, format='ascii.fixed_width_two_line')
+        t2 = Table.read(file2, format='ascii.fixed_width_two_line')
+        
+        final_table = vstack([t1, t2])
+        
+        final_table.write(file1[:14]+'_finaltable.fits',
+                          format='ascii.fixed_width_two_line')
+        
         He1 = np.round(reduced_He_flux[0] + reduced_He_flux[1], 2)
         He1_err = np.round(reduced_He_flux_err[0] + reduced_He_flux_err[1], 2)
         
@@ -2444,7 +2631,7 @@ for i in file_num:
         #then I append this to the final_table
         final_table.append(master_table)
 
-def line_ratio_analysis(master_table):
+def line_ratio_analysis(master_table_file):
     '''
     This function will go through the data and calculate all the line ratios that we are interested. 
     These include OIII/Hbeta, NII/Halpha, SII 6716/6730
@@ -2467,6 +2654,9 @@ def line_ratio_analysis(master_table):
     
     #initializing my variables to zero and will assign them after criteria is met
     #namely that the lines are there
+    
+    master_table = Table.read(master_table_file, format='ascii.fixed_width_two_line')
+    
     OIII5007 = -1
     Hbeta = -1
     NII6583 = -1
