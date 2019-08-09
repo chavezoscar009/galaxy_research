@@ -1,11 +1,11 @@
-                 ID     z          RA         Dec        obsdate      instrument      exptime    logM                                                                             SDSSurl
-=================== ===== =========== ===========  =============  ============== ============  ====== ===================================================================================
-J030903.87+003846.9 0.030  47.2661696  0.64631213  2016-10-10,11  Magellan/LDSS3 3x1200,3x900  6.9953      dr13.sdss.org/optical/spectrum/view?plateid=811&mjd=52669&fiberid=415&run2d=26
-J231903.23+010853.5 0.030 349.7634511  1.14819613     2016-10-10  Magellan/LDSS3       5x1200  7.1583      dr13.sdss.org/optical/spectrum/view?plateid=679&mjd=52177&fiberid=605&run2d=26
-J073149.48+404513.2 0.034 112.9561735 40.75367497     2016-11-17        LBT/MODS       3x1200  7.3983     dr13.sdss.org/optical/spectrum/view?plateid=1734&mjd=53034&fiberid=490&run2d=26
-J082540.44+184617.2 0.038 126.4185384 18.77144731     2016-11-18        LBT/MODS       3x1200  7.1637     dr13.sdss.org/optical/spectrum/view?plateid=2273&mjd=53709&fiberid=464&run2d=26
-J021306.61+005612.4 0.040  33.2775641  0.93680256     2016-11-18        LBT/MODS       3x1200  7.4963     dr13.sdss.org/optical/spectrum/view?plateid=1073&mjd=52649&fiberid=409&run2d=26
-J114827.33+254611.7 0.045 176.7055749  0.89613634     2018-02-08        LBT/MODS       3x1200  7.9532     dr13.sdss.org/optical/spectrum/view?plateid=2510&mjd=53877&fiberid=560&run2d=26
-J232122.50+003455.0 0.053 350.3437887  0.58195693     2016-10-11  Magellan/LDSS3        8x900  7.7069     dr13.sdss.org/optical/spectrum/view?plateid=1095&mjd=52521&fiberid=381&run2d=26
-J120149.90+280610.6 0.056 180.4579175 28.10297145     2018-02-08        LBT/MODS       3x1200  7.9326  dr13.sdss.org/optical/spectrum/view?plateid=6402&mjd=56334&fiberid=33&run2d=v5_9_0
-J014707.04+135629.1 0.057  26.7794038 13.94142227     2016-10-11  Magellan/LDSS3        7x900  8.0370 dr13.sdss.org/optical/spectrum/view?plateid=4658&mjd=55592&fiberid=859&run2d=v5_9_0
+                 ID     z          RA         Dec        obsdate      instrument      exptime    logM seeing                                                                             SDSSurl
+=================== ===== =========== ===========  =============  ============== ============  ====== ====== ===================================================================================
+J030903.87+003846.9 0.030  47.2661696  0.64631213  2016-10-10,11  Magellan/LDSS3 3x1200,3x900  6.9953   0.55      dr13.sdss.org/optical/spectrum/view?plateid=811&mjd=52669&fiberid=415&run2d=26
+J231903.23+010853.5 0.030 349.7634511  1.14819613     2016-10-10  Magellan/LDSS3       5x1200  7.1583   0.50      dr13.sdss.org/optical/spectrum/view?plateid=679&mjd=52177&fiberid=605&run2d=26
+J073149.48+404513.2 0.034 112.9561735 40.75367497     2016-11-17        LBT/MODS       3x1200  7.3983   1.10     dr13.sdss.org/optical/spectrum/view?plateid=1734&mjd=53034&fiberid=490&run2d=26
+J082540.44+184617.2 0.038 126.4185384 18.77144731     2016-11-18        LBT/MODS       3x1200  7.1637   0.95     dr13.sdss.org/optical/spectrum/view?plateid=2273&mjd=53709&fiberid=464&run2d=26
+J021306.61+005612.4 0.040  33.2775641  0.93680256     2016-11-18        LBT/MODS       3x1200  7.4963   1.80     dr13.sdss.org/optical/spectrum/view?plateid=1073&mjd=52649&fiberid=409&run2d=26
+J114827.33+254611.7 0.045 176.7055749  0.89613634     2018-02-08        LBT/MODS       3x1200  7.9532   0.65     dr13.sdss.org/optical/spectrum/view?plateid=2510&mjd=53877&fiberid=560&run2d=26
+J232122.50+003455.0 0.053 350.3437887  0.58195693     2016-10-11  Magellan/LDSS3        8x900  7.7069   0.65     dr13.sdss.org/optical/spectrum/view?plateid=1095&mjd=52521&fiberid=381&run2d=26
+J120149.90+280610.6 0.056 180.4579175 28.10297145     2018-02-08        LBT/MODS       3x1200  7.9326   0.65  dr13.sdss.org/optical/spectrum/view?plateid=6402&mjd=56334&fiberid=33&run2d=v5_9_0
+J014707.04+135629.1 0.057  26.7794038 13.94142227     2016-10-11  Magellan/LDSS3        7x900  8.0370   0.65 dr13.sdss.org/optical/spectrum/view?plateid=4658&mjd=55592&fiberid=859&run2d=v5_9_0
