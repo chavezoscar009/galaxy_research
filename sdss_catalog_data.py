@@ -15,7 +15,7 @@ def gal_info(filename):
     hdu.close()
     return specObjID, spec_z
 
-def z_fitlered(spec_z):
+def z_filtered(spec_z):
     #filtering out the galaxies to only include the ones in my redshift regime
     filt = np.array([True if (x > .025 and x < .06) else False for x in spec_z])
 
@@ -33,44 +33,73 @@ def gal_line_info(filename):
 
     return table2
 
-def OIII_vals(table2):
+def OIII_vals(table2, filt):
 
     #getting the OIII line measurements
-    OIII5007 = table2['OIII_5007_FLUX']
-    OIII5007_err = table2['OIII_5007_FLux_err']
-    OIII5007_EW = table2['OIII_5007_EQW']
+    OIII5007 = table2['OIII_5007_FLUX'][filt]
+    OIII5007_err = table2['OIII_5007_FLux_err'][filt]
+    OIII5007_EW = table2['OIII_5007_EQW'][filt]
+    OIII5007_EW_ERR = table2['OIII_5007_EQW_err'][filt]
 
-def Hbeta_vals(table2):
+    return OIII5007, OIII5007_err, OIII5007_EW, OIII5007_EW_ERR
+
+def Hbeta_vals(table2, filt):
 
     #getting the Hbeta measurement
-    Hbeta = table2['H_BETA_FLUX']
-    Hbeta_err = table2['H_BETA_FLUX_err']
-    Hbeta_EW = table2['H_BETA_EQW']
+    Hbeta = table2['H_BETA_FLUX'][filt]
+    Hbeta_err = table2['H_BETA_FLUX_err'][filt]
+    Hbeta_EW = table2['H_BETA_EQW'][filt]
+    Hbeta_EW_ERR = table2['H_BETA_EQW_ERR'][filt]
 
-def Halpha_vals(table2):
+    return Hbeta, Hbeta_err, Hbeta_EW, Hbeta_EW_ERR
+
+def Halpha_vals(table2, filt):
 
     #getting Halpha line measurements
-    Halpha = table2['H_ALPHA_FLUX']
-    Halpha_err = table2['H_ALPHA_FLUX']
-    Halpha_EW = table2['H_ALPHA_EQW']
+    Halpha = table2['H_ALPHA_FLUX'][filt]
+    Halpha_err = table2['H_ALPHA_FLUX'][filt]
+    Halpha_EW = table2['H_ALPHA_EQW'][filt]
+    Halpha_EW_ERR = table2['H_ALPHA_EQW_ERR'][filt]
 
-def NII_vals(table2):
+    return Halpha, Halpha_err, Halpha_EW, Halpha_EW_ERR
+
+def NII_vals(table2, filt):
 
     #getting NII line measurements
-    NII6584 = table2['NII_6584_FLUX']
-    NII6584_err = table2['NII_6584_FLUX_err']
-    NII6584_EW = table2['NII_6584_EQW']
+    NII6584 = table2['NII_6584_FLUX'][filt]
+    NII6584_err = table2['NII_6584_FLUX_err'][filt]
+    NII6584_EW = table2['NII_6584_EQW'][filt]
+    NII6584_EW_ERR = table2['NII_6584_EQW_ERR'][filt]
 
-def master_filt(filt, OIII5007, OIII5007_err ,Hbeta, Halpha, Halpha_err, NII6584):
+    return NII6584, NII6584_err, NII6584_EW, NII6584_EW_ERR
 
-    ind_neg = np.where((OIII5007 < 0) | (Hbeta < 0) | (Halpha < 0 ) | (NII6584 < 0))
-    ind_zero = np.where((OIII5007 == 0) | (Hbeta == 0) | (Halpha == 0 ) | (NII6584 == 0))
-    ind_neg_err = np.where(OIII5007_err < 0 | Halpha_err < 0)
-    ind_low_SN = np.where(OIII5007/OIII5007_err < 5 | Halpha/Halpha_err < 5)
+def OII_vals(table2, filt):
 
-    master_ind = np.unique(np.concatenate([ind_neg, ind_zero, ind_neg_err, ind_low_SN], axis = None))
+    #getting NII line measurements
+    NII6584 = table2['NII_6584_FLUX'][filt]
+    NII6584_err = table2['NII_6584_FLUX_err'][filt]
+    NII6584_EW = table2['NII_6584_EQW'][filt]
+    NII6584_EW_ERR = table2['NII_6584_EQW_ERR'][filt]
 
-    
+def bad_data_filt(OIII5007, OIII5007_err ,Hbeta, Halpha, Halpha_err, NII6584):
+
+    filt = np.ones(len(OIII5007), dtype = bool)
+
+    for i in range(len(Hbeta)):
+
+        if OIII5007[i] <= 0 or Hbeta[i] <= 0 or Halpha[i] <= 0 or NII6584[i] <= 0:
+            filt[i] = False
+
+        if OIII5007_err[i] <= 0 or Halpha_err[i] <= 0:
+            filt[i] = False
+
+
+
+    return filt
+
+
+
+
 
 '''
 for i in range(len(Hbeta)):
@@ -86,23 +115,87 @@ for i in range(len(Hbeta)):
 
     if OIII5007[i]/OIII5007_err[i] < 5 or Halpha[i]/Halpha_err[i] < 5:
         bad_values_filt[i] = False
-
-OIII_Hbeta = OIII5007[bad_values_filt]/Hbeta[bad_values_filt]
-NII_halpha = NII6584[bad_values_filt]/Halpha[bad_values_filt]
 '''
+#OIII_Hbeta = OIII5007[bad_values_filt]/Hbeta[bad_values_filt]
+#NII_halpha = NII6584[bad_values_filt]/Halpha[bad_values_filt]
 
-def plotting_BPT(Table):
+
+specObjID, spec_z = gal_info('galSpecInfo-dr8.fits')
+filt = z_filtered(spec_z)
+table = gal_line_info('galSpecLine-dr8.fits')
+
+OIII5007, OIII5007_err, OIII5007_EW, OIII5007_EW_ERR = OIII_vals(table, filt)
+Hbeta, Hbeta_err, Hbeta_EW, Hbeta_EW_ERR = Hbeta_vals(table, filt)
+Halpha, Halpha_err, Halpha_EW, Halpha_EW_ERR = Halpha_vals(table, filt)
+NII6584, NII6584_err, NII6584_EW, NII6584_EW_ERR = NII_vals(table, filt)
+
+bad_data_filter =  bad_data_filt(OIII5007, OIII5007_err ,Hbeta, Halpha, Halpha_err, NII6584)
+
+def apply_filter(data, filt):
+    return data[filt]
+
+def line_filter(line, line_err, ew, ew_err, filter):
+
+    good_line = apply_filter(line, filter)
+    good_line_err = apply_filter(line_err , filter)
+    good_line_EW = apply_filter(ew , filter)
+    good_line_EW_ERR = apply_filter(ew_err , filter)
+
+    return good_line, good_line_err, good_line_EW, good_line_EW_ERR
+
+OIII5007_line, OIII5007_line_err, OIII5007_line_EW, OIII5007_line_EW_ERR = line_filter(OIII5007, OIII5007_err, OIII5007_EW, OIII5007_EW_ERR, bad_data_filter)
+Hbeta_line, Hbeta_line_err, Hbeta_line_EW, Hbeta_line_EW_ERR = line_filter(Hbeta, Hbeta_err, Hbeta_EW, Hbeta_EW_ERR, bad_data_filter)
+Halpha_line, Halpha_line_err, Halpha_line_EW, Halpha_line_EW_ERR = line_filter(Halpha, Halpha_err, Halpha_EW, Halpha_EW_ERR, bad_data_filter)
+NII6584_line, NII6584_line_err, NII6584_line_EW, NII6584_line_EW_ERR  = line_filter(NII6584, NII6584_err, NII6584_EW, NII6584_EW_ERR, bad_data_filter)
+
+def low_SN(OIII5007_line, OIII5007_line_err, Halpha_line, Halpha_line_err):
+
+    filt = np.ones(len(OIII5007_line), dtype = bool)
+
+    for i in range(len(OIII5007_line)):
+        if OIII5007_line[i]/OIII5007_line_err[i] < 5 or Halpha_line[i]/Halpha_line_err[i] < 5:
+            filt[i] = False
+    return filt
+
+SN_filt = low_SN(OIII5007_line, OIII5007_line_err, Halpha_line, Halpha_line_err)
+#plt.figure()
+#plt.title('BPT Diagram')
+#plt.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4)
+#plt.show()
+
+OIII_Hbeta = OIII5007_line/Hbeta_line
+NII_halpha = NII6584_line/Halpha_line
+
+def SFR_galaxies():
+
+    def SFR(x):
+        return .61/(x - .47) + 1.19
+
+    log_OIII_hbeta = np.log10(OIII_hbeta)
+    log_NII_halpha = np.log10(NII_halpha)
+
+    sfr_filt = np.ones(len(OIII_hbeta), dtype = bool)
+
+    for i, val in enumerate(log_NII_halpha):
+        y = SFR(val)
+        if  log_OIII_hbeta[i] >= y:
+            sfr_filt[i] = False
+
+    return sfr_filt
+
+
+def plotting_BPT(table):
 
     #making a filter to only get the ones that have the ratios there
-    filt = np.zeros(len(Table), dtype = bool)
+    filt = np.zeros(len(table), dtype = bool)
 
-    #for loop that cjhecks to see if ratio is in table if it is assigns that index to True
-    for i, val in enumerate(Table['NII6583/Halpha']):
+    #for loop that checks to see if ratio is in table if it is assigns that index to True
+    for i, val in enumerate(table['NII6583/Halpha']):
         if val > 0:
             filt[i] = True
 
     #makes a sub Tbale with only the objects with ratios
-    new_table = Table[filt]
+    new_table = table[filt]
 
     #getting the ratios of interest and object name
     OIII_HB = new_table['OIII5007/Hbeta']
@@ -112,8 +205,11 @@ def plotting_BPT(Table):
     #making an x array that will be used for plotting the cutoff points
     x = np.logspace(-2, 1.5, 1000)
 
-    #got this from Kewely et al
+    #got this from Kewely et al early 2000
     y = .61/(np.log10(x) - .47) + 1.19
+
+    #got this from Kewely et al early 2013
+    y_new = .61/(np.log10(x) + .08) + 1.1
 
     #got this from Kauffmann et al 2003 for AGN classification
     y_agn = .61/(np.log10(x) - .05) + 1.3
@@ -124,51 +220,41 @@ def plotting_BPT(Table):
     #making a filter for the Kauffmann funciton to get rid of the line
     filt2 = np.ones(len(x), dtype = bool)
 
+    filt3 = np.ones(len(x), dtype = bool)
+
     #getting indices where the log(x) are bigger than some number to apply the filtering
     ind = np.where(np.log10(x) > 0.4)
     ind2 = np.where(np.log10(x) > 0)
+    ind3 = np.where(np.log10(x) > -.1)
 
     #assigning those values to false so that i can mask them out in the respective functions
     filt1[ind] = False
     filt2[ind2] = False
+    filt3[ind3] = False
 
     #plotting the BPT diagram
-    plt.figure(figsize = (10,10))
-    plt.title('BPT Diagram')
-    plt.xlabel(r'$log(\frac{[NII]6854}{H\alpha}) $ ', fontsize = 15)
-    plt.ylabel(r'$log(\frac{[OIII]5007}{H\beta}) $ ', fontsize = 15)
-    plt.xlim(-2, 1.5)
-    plt.ylim(-1.5, 2)
+    fig, (ax1, ax2) = plt.subplots(2, 1)
+    ax1.title('BPT Diagram')
+    ax1.xlabel(r'$log(\frac{[NII]6854}{H\alpha}) $ ', fontsize = 15)
+    ax1.ylabel(r'$log(\frac{[OIII]5007}{H\beta}) $ ', fontsize = 15)
+    ax1.xlim(-2, 1.5)
+    ax1.ylim(-1.5, 2)
 
-    plt.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4)
-    plt.plot(np.log10(x)[filt1], y[filt1], 'k--', linewidth = 1)
-    plt.plot(np.log10(x)[filt2], y_agn[filt2], 'b--')
+    ax1.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4)
+    line1, = plt.plot(np.log10(x)[filt1], y[filt1], 'k--', label = 'Kewley 2003',  linewidth = 1)
+    line2, = plt.plot(np.log10(x)[filt3], y_new[filt3], 'y--', label = 'Kewley 2013',linewidth = 1)
+    line3, = plt.plot(np.log10(x)[filt2], y_agn[filt2], 'b--', label = 'Kauffmann')
+
 
     for i in range(len(OIII_HB)):
-        plt.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', markersize=15 ,label = obj[i])
+        ax1.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', markersize=15 ,label = obj[i])
 
-    plt.legend(loc = 'best', frameon=False)
-    #plt.savefig('BPT_Diagram.pdf')
+    #plt.legend(handles = [line1, line2, line3], loc = 'upper right', frameon=False)
+    ax1.legend(loc = 'lower right', frameon=False)
+    #plt.savefig('BPT_Diagram.eps', format=eps)
     plt.show()
 
-def SFR_galaxies(Table):
-
-    #making an x array that will be used for plotting the cutoff points
-    x = np.logspace(-2, 1.5, 1000)
-
-    #got this from Kewely et al
-    y = .61/(np.log10(x) - .47) + 1.19
-
-    #making a filter to get only the star forming galaxies
-    SFR_filt = np.ones(len(OIII_Hbeta), dtpye = bool)
-
-    #getting the indices where the log(OIII/Hbeta) is bigger than the cutoff
-    sfr = np.where(np.log10(OIII_Hbeta) > y[filt1])
-
-    #Setting the indices where they are above the cutoff to false
-    SFR_filt[sfr] = False
-    pass
-
+'''
 #getting OIII4959
 OIII4959 = table2['OIII_4959_FLUX'][filt]
 OIII4959_err = table2['OIII_4959_FLux_err'][filt]
@@ -192,3 +278,4 @@ R32 = (OII3726[negative_num_R32] + OIII5007[negative_num_R32] + OIII4959[negativ
 
 def plotting_R32(Table):
     pass
+'''
