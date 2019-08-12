@@ -938,7 +938,7 @@ def fitting_continuum(wavelength_spec, spectra, z, line_lam, file):
     '''
 
     #returns a continuum subtracted spectrum, the continuum fit function, filt_noise, filt_z for the spec_redshift function, st
-    return continuum_subtracted_spec, continuum_fit, filt_noise, filt_z
+    return continuum_subtracted_spec, continuum_fit, filt_noise, filt_z, filt
 
 def spec_redshift(flux, wavelength, filt, line, z, percentile, filename, line_name):
 
@@ -1222,7 +1222,7 @@ def SN_calculation(spec_dist, wavelength, z, line_lam, filename, num):
     #plt.show()
 
 
-def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion, noise, just_noise):
+def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_name, filename, seeing, conversion, noise, just_noise, filte):
 
     '''
 
@@ -1366,15 +1366,15 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #continuum_val = []
 
     #quick check to see if emission has all the emission lines
-    plt.figure(figsize = (12, 6))
-    plt.title('Checking Emission Lines')
-    plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .5)
+    #plt.figure(figsize = (12, 6))
+    #plt.title('Checking Emission Lines')
+    #plt.plot(spectrum.spectral_axis, spectrum.flux, alpha = .5)
 
-    for i in emission['line_center'].value:
-        plt.axvline(i, linewidth = .5, linestyle= '--')
+    #for i in emission['line_center'].value:
+    #    plt.axvline(i, linewidth = .5, linestyle= '--')
 
-        plt.text(i , np.amax(spectrum.flux.value)/3, str(round(i, 2)), rotation = 270, fontsize = 'x-small')
-    plt.show()
+    #    plt.text(i , np.amax(spectrum.flux.value)/3, str(round(i, 2)), rotation = 270, fontsize = 'x-small')
+    #plt.show()
 
     #plt.figure(figsize = (12, 6))
     #plt.title('Sub Spectrum and Fitting')
@@ -1384,18 +1384,18 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
     SNoise = []
     #SNoise_err = []
-
+    
     for i in emission['line_center']:
         #print('Before')
-        print(i)
+        #print(i)
 
-        emission_line_center, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN = Monte_Carlo(wavelength[filt],
-                                                                                                                             flux[filt],
-                                                                                                                             noise[filt],
-                                                                                                       i, continuum_func, just_noise)
+        emission_line_center, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN = Monte_Carlo(wavelength,
+                                                                                                                             flux,
+                                                                                                                             noise,
+                                                                                                       i, continuum_func, just_noise, filte)
 
         #print('After')
-        print(i)
+        #print(i)
         #print()
         if emission_line_center < 0:
             continue
@@ -1410,8 +1410,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
         line_f_err.append(manual_flux_err)
         SNoise.append(SN)
         #SNoise_err.append(SN_err)
-
         '''
+        
         #making a window to look around the line center so that I can do some analysis using specutils
         #as well as my own homemade functions
         window = 10*u.angstrom
@@ -1516,7 +1516,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     table['Line EW Error'] = np.array(EW_err)
     table['Line S/N'] = np.array(SNoise)
     #table['Line S/N Error'] = np.array(SNoise_err)
-
+    
     #print(table)
     #plt.show()
     #print(line_center)
@@ -1531,6 +1531,7 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     He_line_flux_err = []
 
     He_lines_center = []
+    He_name = []
     #He_lines_center_err = []
 
     He_EW = []
@@ -1538,6 +1539,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
     He_Sn = []
     #He_Sn_err = []
+    
+    #He_center = []
 
     #plt.figure(figsize = (14, 6))
     #plt.plot(spectrum.spectral_axis, spectrum.flux)
@@ -1573,9 +1576,9 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
         #if par[1]< 0:
             #continue
-
-        He_line_center, He_ew, He_ew_err, He_flux, He_flux_err, He_SN = Monte_Carlo(wavelength[filt], flux[filt], noise[filt],
-                                                                                                                             val, continuum_func, just_noise)
+        He_name.append(He_line_names[i])
+        He_line_center, He_ew, He_ew_err, He_flux, He_flux_err, He_SN = Monte_Carlo(wavelength, flux, noise,
+                                                                                                                             val, continuum_func, just_noise, filte)
 
         '''
         He_table['Observed Line Center'] = np.array(He_line_center)
@@ -1608,7 +1611,8 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
 
         #He_line_flux[i] = flux_line
         #He_lines_center[i] = par[1]
-
+    #print(He_lines_center)
+    #print(He_name)
     He_table['Observed Line Center'] = np.array(He_lines_center)
     He_table['Line Flux'] = np.array(He_line_flux)
     He_table['Line Flux Error'] = np.array(He_line_flux_err)
@@ -1839,13 +1843,14 @@ def analysis(flux, wavelength, filt, line, z, continuum_func, percentile, line_n
     #print('Combined Table')
     #print(t)
     #print()
-    return t#, [He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)]
+    return t, np.array(He_name), np.array(He_lines_center)#, [He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)]
 
-def name_matching(table, line_name, line_wavelength, z, filename):
+def name_matching(table, line_name, line_wavelength, z, filename, He_center, He_names):
 
     line_center = table['Observed Line Center']
     name_list = []
-
+    #print(line_center)
+    #print(He_center)
     match_wave = []
     for i, val in enumerate(line_center):
 
@@ -1857,18 +1862,27 @@ def name_matching(table, line_name, line_wavelength, z, filename):
         #if check < 0 :
             #name_list.append('---')
         #else:
-        if diff > 2.5:
-            name_list.append('---')
+        if int(val) in He_center.astype(int):
+            #print(val)
+            #print(He_center)
+            He_name = He_names[He_center.astype(int) == int(val)][0]
+            name_list.append(He_name)
             continue
+        
+        if diff > 3:
+            name_list.append('---')
 
-        name_list.append(line_name[ind])
-        match_wave.append(line_wavelength[ind])
+        else:    
+            name_list.append(line_name[ind])
+            match_wave.append(line_wavelength[ind])
 
     name = Column(np.array(name_list), name='Line Name')
+    
     table.add_column(name, index = 0)
-
+    #print('after Adding Column')
     #print(table)
-    rounded_lines = np.round(line_center)
+    
+    rounded_lines = line_center.astype(int)
     arr, ind = np.unique(rounded_lines, return_index=True)
 
     ind_array = np.arange(len(rounded_lines))
@@ -1881,13 +1895,13 @@ def name_matching(table, line_name, line_wavelength, z, filename):
 
         table.remove_rows(row_removal)
 
-
+    print(table)
     #writing files for the objects
     if 'cem' in filename:
-        table.write(filename[7:-9] + '_table.fits', format='ascii.fixed_width_two_line')
+        table.write(filename[7:-9] + '_table.fits', format='ascii.fixed_width_two_line', overwrite= True)
 
     if 'ce.fits' in filename:
-        table.write(filename[7:-8] + '_table.fits', format='ascii.fixed_width_two_line')
+        table.write(filename[7:-8] + '_table.fits', format='ascii.fixed_width_two_line', overwrite =True)
 
     '''
     for i, val in enumerate(name_list):
@@ -1905,7 +1919,7 @@ def name_matching(table, line_name, line_wavelength, z, filename):
 
     return table
 
-def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise):
+def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise, filt):
 
     '''
 
@@ -1943,9 +1957,10 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
     counter = 0
     bad_fit = 0
     uncertainty = StdDevUncertainty(just_noise*u.erg/u.s/u.cm/u.cm/u.angstrom)
-    print(counter)
+    #print(counter)
+    sn_counter = 0
     while counter <= 1000:
-        print(counter)
+        #print(counter)
         new_flux = np.random.normal(flux, scale = noise)
 
 
@@ -1965,7 +1980,7 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
         sub_spectrum = extract_region(spectrum, sub_region)
 
 
-
+        '''
         if counter == 0:
             spectrum1 = Spectrum1D(spectral_axis=wavelength*u.angstrom,
                                   flux =flux*u.erg/u.s/u.cm/u.cm/u.angstrom, uncertainty=uncertainty)
@@ -1975,7 +1990,7 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
             sub_region1 = SpectralRegion(i - window, i + window)
             sub_spectrum1 = extract_region(spectrum1, sub_region1)
             SN = round(snr(sub_spectrum1).value, 2)
-
+        '''
         #this calls a function which fits the sub region with a gaussian
         par = fitting_lines(sub_spectrum)
 
@@ -1994,7 +2009,21 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
             if bad_fit > 700:
                 return np.array([-999,-999,-999, -999, -999, -999])
             continue
-
+        
+        if sn_counter == 0:
+            
+            wave = wavelength[filt]
+            noise_flux = flux[filt]
+            
+            index = abs(i.value - wave).argmin()
+            
+            rms_noise = noise_flux[index-7:index+7]
+            
+            std_noise = np.std(rms_noise)
+            
+            SN = round(par[0]/std_noise, 4)
+            sn_counter += 1
+            
         #Sn = snr(sub_spectrum)
         #getting the flux of the line using scipy curve fit parameters
         flux_line = np.sqrt(2*np.pi)*abs(par[0])*abs(par[-1])
@@ -2023,7 +2052,8 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
          #   break
 
 
-    print(counter)
+    #print(counter)
+    
     if len(dist_center) == 0:
         return -999 * np.ones(6)
 
@@ -2032,16 +2062,16 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
 
     good_data = np.where((dist_flux>low) & (dist_flux < high))
 
-    hist_center, bin_edges_center = np.histogram(np.array(dist_center)[good_data], bins='auto')
+    hist_center, bin_edges_center = np.histogram(np.array(dist_center)[good_data], bins='fd')
 
     #plt.plot(bin_edges_center[:-1], dist_center, '.')
 
-    hist_flux, bin_edges_flux = np.histogram(np.array(dist_flux)[good_data], bins = 'auto')
+    hist_flux, bin_edges_flux = np.histogram(np.array(dist_flux)[good_data], bins = 'fd')
 
     #plt.hist(dist_flux, bins = len(bin_edges_flux))
     #plt.show()
 
-    hist_ew, bin_edges_ew = np.histogram(np.array(dist_ew)[good_data], bins = 'auto')
+    hist_ew, bin_edges_ew = np.histogram(np.array(dist_ew)[good_data], bins = 'fd')
 
     #hist_SN, bin_edges_SN = np.histogram(SN_dist, bins='auto')
 
@@ -2071,33 +2101,34 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
     #par_SN = -999 * np.ones(3)
 
     try:
-        print('Emission Lines')
+        #print('Emission Lines')
         par_center, cov = curve_fit(f, bin_center, hist_center, p0 = [np.amax(hist_center), bin_center[hist_center.argmax()], np.std(bin_center)])
 
-        emission_line_center = round(par_center[1], 1)
+        emission_line_center = round(par_center[1], 4)
 
     except RuntimeError:
-        print('emission Line err')
-        emission_line_center = round(line_center.value, 1)
-    fig, (ax1, ax2) = plt.subplots(2, 1)
-    ax1.bar(bin_center_flux, hist_flux, align='center', width=bin_center_flux[1]-bin_center_flux[0])
-    ax2.bar(bin_center_ew, hist_ew, align='center', width=bin_center_ew[1]-bin_center_ew[0])
-    plt.show()
+        #print('emission Line err')
+        emission_line_center = round(line_center.value, 4)
+    #fig, (ax1, ax2) = plt.subplots(2, 1)
+    #ax1.bar(bin_center_flux, hist_flux, align='center', width=bin_center_flux[1]-bin_center_flux[0])
+    #ax2.bar(bin_center_ew, hist_ew, align='center', width=bin_center_ew[1]-bin_center_ew[0])
+    #plt.show()
+    
     try:
-        print('calculation')
+        #print('calculation')
         par_flux, cov = curve_fit(f, bin_center_flux, hist_flux, p0 = [np.amax(hist_flux), bin_center_flux[hist_flux.argmax()], np.std(bin_center_flux)])
-        print('after flux')
+        #print('after flux')
 
     except RuntimeError:
-        print('calculation error flux')
+        #print('calculation error flux')
         return -999*np.ones(6)
     try:
         par_ew, cov = curve_fit(f, bin_center_ew, hist_ew, p0 = [np.amax(hist_ew), bin_center_ew[hist_ew.argmax()], np.std(bin_center_ew)])
-        print('after ew')
+        #print('after ew')
         #par_SN, cov = curve_fit(f, bin_center_SN, hist_SN, p0 = [np.amax(hist_SN), bin_center_SN[hist_SN.argmax()], np.std(bin_center_SN)])
 
     except RuntimeError:
-        print('calculation error EW')
+        #print('calculation error EW')
         return -999*np.ones(6)
     '''
     try:
@@ -2111,10 +2142,10 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
 
     #emission_line_center = round(par_center[1], 2)
     #emission_line_center_err = round(par_center[-1], 4)
-    manual_ew = round(par_ew[1], 1)
-    manual_ew_err = round(par_ew[-1], 1)
-    manual_flux = round(par_flux[1], 1)
-    manual_flux_err = round(par_flux[-1], 1)
+    manual_ew = round(par_ew[1], 4)
+    manual_ew_err = round(par_ew[-1], 4)
+    manual_flux = round(par_flux[1], 4)
+    manual_flux_err = round(par_flux[-1], 4)
     #SN = round(par_SN[1], 1)
     #SN_err = round(par_SN[-1], 4)
 
@@ -2128,7 +2159,7 @@ def Monte_Carlo(wavelength, flux, noise, line_center, continuum_func, just_noise
     manual_flux = np.nanmean(dist_flux)
     manual_flux_err = np.nanstd(dist_flux)
     '''
-    print('Everything Gucci')
+    #print('Everything Gucci')
     return emission_line_center, manual_ew, manual_ew_err, manual_flux, manual_flux_err, SN
 
 
@@ -2252,7 +2283,7 @@ He_EW =[]
 He_EW_err =[]
 
 for i in files:
-
+    
     if 'cem.fits' in i:
         #plt.figure(figsize = (14, 7))
         #print(i)
@@ -2292,14 +2323,14 @@ for i in files:
         cal_err = cal_sigma_inter(wvln)
 
         #fits the continuum
-        spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt_noise, filt_z, filt = fitting_continuum(wvln, spec, z1, line_wavelength, i)
 
         #plt.plot(wvln[filt_z], spec[filt_z], 'y-', alpha = .5, label = 'Non-Optimal')
 
         #assigns the percentile to 97
         percentile = 97
 
-        #np.savez(i[7:-9], flux=spectra[filt_z], wavelength=wvln[filt_z])
+        np.savez(i[7:-5], flux=spectra, wavelength=wvln)
 
         if 'J231903+010853' in i:
             percentile = 98
@@ -2314,7 +2345,9 @@ for i in files:
 
         #gets the spectroscopic redshift
         spectroscopic_redshift = spec_redshift(spectra, wvln, filt_z, line_wavelength, z1, 99, i, line_name)
-
+        
+        np.savez(i[7:-5], flux=spectra, wavelength=wvln, z = spectroscopic_redshift)
+        
         #plt.plot(wvln1[filt_z1], spec1[filt_z1], 'r--', label = 'Optimal')
         #plt.legend(loc = 'best')
         #plt.show()
@@ -2330,15 +2363,15 @@ for i in files:
 
         #s = time.time()
         #table, He_info  =
-        table = analysis(spectra, wvln, filt_z, line_wavelength,
-                                                                           spectroscopic_redshift, cont_func, percentile, line_name,
-                                                                           i, seeing_t, conversion, total_err, noise)
+        #table, He_name, He_lines_center = analysis(spectra, wvln, filt_z, line_wavelength,
+                                                                       #    spectroscopic_redshift, cont_func, percentile, line_name,
+                                                                       #    i, seeing_t, conversion, total_err, noise, filt)
         #e = time.time()
 
         #print('Post Analysis')
         #print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
 
-        new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i)
+        #new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i,He_lines_center, He_name)
 
         #print(new_table)
         #He_line_names, He_lines.value/(1+z), He_line_flux, He_line_flux_err, np.array(He_lines_center), np.array(He_lines_center_err), np.array(He_EW), np.array(He_EW_err)
@@ -2359,7 +2392,6 @@ for i in files:
         #He_EW_err.append(He_info[-1])
 
         #ax1.plot(wavelength, spec, label = i)
-
     if 'mods1b' in i:
 
         print(i)
@@ -2389,7 +2421,7 @@ for i in files:
         spec, wvln,  noise = spectrum(i)
 
         #fits the continuum
-        spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt_noise, filt_z, filt = fitting_continuum(wvln, spec, z1, line_wavelength, i)
 
         #plt.figure(figsize = (14, 7))
         #plt.plot(wvln[filt_noise], spec[filt_noise], alpha = .5, label = 'Non-Optimal')
@@ -2417,19 +2449,19 @@ for i in files:
         #plt.legend(loc = 'best')
         #plt.show()
 
-        #np.savez(i[7:-8], flux=spectra[filt_z], wavelength=wvln[filt_z])
+        np.savez(i[7:-8], flux=spectra, wavelength=wvln, z = spectroscopic_redshift)
 
         #s = time.time()
         #getting the table and He_1 lines
         #table, He_info =
-        table = analysis(spectra, wvln, filt_z, line_wavelength,
-                                                                            spectroscopic_redshift, cont_func, percentile,
-                                                                            line_name, i, seeing_t, conversion, total_err, noise)
+        #table, He_name, He_lines_center = analysis(spectra, wvln, filt_z, line_wavelength,
+           #                                                                 spectroscopic_redshift, cont_func, percentile,
+          #                                                                  line_name, i, seeing_t, conversion, total_err, noise, filt)
 
         #e = time.time()
         #print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
 
-        new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i)
+        #new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i,He_lines_center, He_name)
         #print(new_table)
         #appending table and HeI lines to lists above
         #table_list.append(table)
@@ -2451,7 +2483,7 @@ for i in files:
 
         #He_EW.append(He_info[-2])
         #He_EW_err.append(He_info[-1])
-
+    
     if 'mods1r' in i:
 
         #print(i)
@@ -2479,7 +2511,7 @@ for i in files:
         spec, wvln, noise = spectrum(i)
 
         #fitting the continuum
-        spectra, cont_func, filt_noise, filt_z = fitting_continuum(wvln, spec, z1, line_wavelength, i)
+        spectra, cont_func, filt_noise, filt_z, filt = fitting_continuum(wvln, spec, z1, line_wavelength, i)
 
         #plt.figure(figsize = (14, 7))
         #plt.plot(wvln[filt_noise], spec[filt_noise], alpha = .5, label = 'Non-Optimal')
@@ -2509,18 +2541,18 @@ for i in files:
 
         #SN_calculation(spec_dist, wvln, spectroscopic_redshift, line_wavelength, i)
 
-        #np.savez(i[7:-8], flux=spectra[filt_z], wavelength=wvln[filt_z])
+        np.savez(i[7:-8], flux=spectra, wavelength=wvln, z = spectroscopic_redshift)
 
         #s = time.time()
         #getting the table and HeI lines
         #table, He_info =
-        table = analysis(spectra, wvln, filt_z, line_wavelength, spectroscopic_redshift,
-                                                                            cont_func, percentile, line_name, i, seeing_t, conversion, total_err, noise)
+        #table, He_name, He_lines_center = analysis(spectra, wvln, filt_z, line_wavelength, spectroscopic_redshift,
+                                                                          #  cont_func, percentile, line_name, i, seeing_t, conversion, total_err, noise, filt)
 
         #e = time.time()
         #print(str(int((e-s)//60)) + ' min ' + str(int((e-s)%60)) + ' s')
 
-        new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i)
+        #new_table = name_matching(table, line_name, line_wavelength, spectroscopic_redshift, i, He_lines_center, He_name)
         #print(new_table)
         #appending tabe and HeI lines to lists above
         #table_list.append(table)
@@ -2551,13 +2583,15 @@ for i in files:
 #ax2.legend(loc='best')
 #ax3.legend(loc='best')
 #plt.show()
-'''
 
-table_files =np.array([x for x in glob.glob('*table.fits')])
+exit()
+
+
+table_files =np.array([x for x in glob.glob('*table.fits') if 'final' not in x])
 
 #list that will hold the final table for files looking at the same galaxy but 2 different
 final_table = []
-'''
+
 #looping over file_num which holds unique values of the file ID meaning it got rid of repeats
 for i in file_num:
 
@@ -2577,7 +2611,7 @@ for i in file_num:
     #this holds the number of files in obj_files
     num_of_files = len(obj_files)
     reduced_files = table_files[same_obj]
-
+    
     #reduced_table holds the files of only those of the same object
     reduced_table = np.array(table_list)[same_obj]
 
@@ -2593,14 +2627,14 @@ for i in file_num:
 
     reduced_EW = np.array(He_EW)[same_obj]
     reduced_EW_err = np.array(He_EW_err)[same_obj]
-
+    
     #if only one file then we append the table to the final table
     if num_of_files == 1:
         file = reduced_files[0]
         print(file)
         t = Table.read(file, format='ascii.fixed_width_two_line')
-        print(type(t))
-        t.write(file[:14]+'_finaltable.fits', format ='ascii.fixed_width_two_line')
+        #print(type(t))
+        t.write(file[:14]+'_finaltable.fits', format ='ascii.fixed_width_two_line', overwrite=True)
         #final_table.append(reduced_table[0])
 
     #if there is two then we got some work to do before appending
@@ -2608,16 +2642,16 @@ for i in file_num:
         file1 = reduced_files[0]
         file2 = reduced_files[1]
         #first we add up the HeI lines because one file will have [val, 0, 0] and the other one will have [0, val, val]
-        print(file1)
-        print(file2)
+        #print(file1)
+        #print(file2)
         t1 = Table.read(file1, format='ascii.fixed_width_two_line')
         t2 = Table.read(file2, format='ascii.fixed_width_two_line')
 
         final_table = vstack([t1, t2])
 
         final_table.write(file1[:14]+'_finaltable.fits',
-                          format='ascii.fixed_width_two_line')
-
+                          format='ascii.fixed_width_two_line', overwrite=True)
+        
         He1 = np.round(reduced_He_flux[0] + reduced_He_flux[1], 2)
         He1_err = np.round(reduced_He_flux_err[0] + reduced_He_flux_err[1], 2)
 
@@ -2648,9 +2682,9 @@ for i in file_num:
 
         #then I append this to the final_table
         final_table.append(master_table)
+        
+
 '''
-
-
 
 def OIII_OII_ratio(master_table):
 
@@ -2712,10 +2746,10 @@ def line_ratio(master_table, line1_, line2_):
         return -999, -999
 
     ratio_err = np.sqrt(line1_err**2 + line2_err**2)
-    if line1_ == '[NII]6583':
-        print(line1)
-        print(line2)
-        print(line1/line2)
+    #if line1_ == '[NII]6583':
+        #print(line1)
+        #print(line2)
+        #print(line1/line2)
 
     ratio = line1/line2
 
@@ -2757,6 +2791,7 @@ def OxygenIII_ratios(master_table):
     return ratio, ratio_err
 
 def galaxy_temperature(ratio):
+    
     if ratio < 0:
         return -999
     #assuming a number density of 100 cm^(-3)
@@ -2783,7 +2818,42 @@ def galaxy_temperature(ratio):
 
     return round(T, 1)
 
+def He_ratio(master_table):
+    
+    HB = -1
+    He7065 = -1
+    He7065_err = -1
+    
+    He6678 = -1
+    He6678_err = -1
+    
+    for i, val in enumerate(master_table['Line Name']):
+
+        if val == 'HeI7065':
+            He7065 = master_table[i][2]
+            He7065_err = master_table[i][3]
+
+        if val == 'HeI6678':
+            He6678 = master_table[i][2]
+            He6678_err = master_table[i][3]
+        
+        if val == 'Hbeta_4861':
+            HB = master_table[i][2]
+
+    if He7065< 0 or He6678 < 0:
+        return -999, -999
+    
+    He3889 = .107 * HB
+    
+    #ratio_err = np.sqrt(OIII5007_err**2 + OIII4959_err**2 + OIII4363_err**2)
+
+    ratio1 = He3889/He6678
+    ratio2 = He7065/He6678
+    
+    return ratio1, ratio2
+    
 def line_ratio_analysis(master_table_file):
+    
     '''
     This function will go through the data and calculate all the line ratios that we are interested.
     These include OIII/Hbeta, NII/Halpha, SII 6716/6730
@@ -2809,7 +2879,7 @@ def line_ratio_analysis(master_table_file):
 
     master_table = Table.read(master_table_file, format='ascii.fixed_width_two_line')
 
-    '''
+    #print(master_table)
     OIII5007 = -1
     Hbeta = -1
     NII6583 = -1
@@ -2826,151 +2896,18 @@ def line_ratio_analysis(master_table_file):
 
     OIII4363 = -1
     OIII4959 = -1
-    '''
-
-
-    #for BPT Diagram
+    
     OIII_Hbeta, OIII_Hbeta_err = line_ratio(master_table, '[OIII]5007', 'Hbeta_4861')
     NII_halpha, NII_halpha_err = line_ratio(master_table, '[NII]6583', 'Halpha_6562')
     SII_ratio, SII_ratio_err = line_ratio(master_table, '[SII]6716', '[SII]6730')
     OIII_OII, OIII_OII_err = OIII_OII_ratio(master_table)
     OIII_ratio, OIII_ratio_error = OxygenIII_ratios(master_table)
     Temp = galaxy_temperature(OIII_ratio)
-
+    He_3889_6678,He_7065_6678 = He_ratio(master_table)
+    
     ID = master_table_file[:14]
-    '''
-    ################################
-    #Calculating Helium Line Ratios
-    ################################
-
-    #got this from the isotov paper im sure we will have to change this value up as it seems to be
-    #in the Temperature range 15000-20000K
-    HeI3889 = .107 * Hbeta
-
-    He_7065_6678 =-1
-    He_3889_6678 = -1
-
-    #calculating line ratio for helium
-    if HeI6678 < 0:
-        He_7065_6678 = -999
-        He_3889_6678 = -999
-
-    else:
-        He_7065_6678 = HeI7065/HeI6678
-        He_3889_6678 = HeI3889/HeI6678
-
-    ################################
-    #Silicon Line Ratio
-    ################################
-
-    if SII6730 < 0:
-        SII_6716_6730 = -999
-
-    else:
-        SII_6716_6730  = SII6716/SII6730
-
-    ################################
-    #Oxygen Line Ratio Part 1: Finding How Ionizing it is
-    ################################
-
-    OIII5007_OII3727 = -999
-    OIII5007_OII3725 = -999
-
-    if OII3727 > 0:
-        OIII5007_OII3727 = OIII5007/OII3727
-
-    if OII3725 > 0:
-        OIII5007_OII3725 = OIII5007/OII3725
-
-    ################################
-    #Oxygen Line Ratio Part 2: Getting Temperature
-    ################################
-
-    OIII_ratio = -1
-    T = -999
-
-    if OIII5007 < 0 or OIII4959 < 0 or OIII4363 < 0:
-        OIII_ratio = -999
-
-    else:
-        #gets the line ratio of all the OIII lines
-        OIII_ratio = (OIII5007 + OIII4959)/OIII4363
-
-        #assuming a number density of 100 cm^(-3)
-        ne = 100
-
-        #makes an array in logspace for the temperature
-        Temp = np.logspace(3, 5, 10000)
-
-        #makes a line corresponding to the ratio caluclated above
-        ratio_line = OIII_ratio * np.ones(len(Temp))
-
-        #calculated the numerator and denominator of the equation that will give us the temperature of the gas
-        num = 7.9*np.exp(3.29e4/Temp)
-        denom = 1+((4.5e-4 * ne))/np.sqrt(Temp)
-
-        #holds the values for the temperature ratio
-        ratio_T = num/denom
-
-        #gets the index where both lines; ratio_line and ratio_T cross
-        idx = np.argwhere(np.diff(np.sign(ratio_line - ratio_T))).flatten()
-
-        #gets the temperature in this variable
-        T = Temp[idx][0]
-
-
-    #########################################
-    #BPT Line Ratios: OIII/Hbeta, NII/Halpha
-    #########################################
-
-    #calculating line ratios
-    OIII_Hbeta = 0
-    NII_Halpha = 0
-
-    #checking the different criterias and if not there then assign ratio -999
-    if OIII5007 > 0 and Hbeta > 0 and NII6583 > 0 and Halpha > 0:
-        #print('All Good')
-        OIII_Hbeta = OIII5007/Hbeta
-        NII_Halpha = NII6583/Halpha
-
-
-    if (OIII5007 > 0 and Hbeta > 0) and (NII6583 < 0 or Halpha < 0):
-        #print('OIII_Hbeta Good')
-        OIII_Hbeta = OIII5007/Hbeta
-        NII_Halpha = -999
-
-
-    if (OIII5007 < 0 or Hbeta < 0 )and (NII6583 > 0 and Halpha > 0):
-        #print('Halpha_NII Good')
-        OIII_Hbeta = -999
-        NII_Halpha = NII6583/Halpha
-
-
-    ###############################
-    #getting R32 Value
-    ###############################
-
-    R32 = -1
-
-    if OIII5007 > 0 and OII3727 > 0 and OIII4959 > 0 and Hbeta > 0:
-        R32 = (OII3727 + OIII5007 + OIII4959)/ Hbeta
-    else:
-        R32 = -999
-
-    ##############################
-    #Metallicity Estimation
-    ##############################
-
-    Metal = -1
-
-    if OII3727 > 0 and Halpha > 0 and NII6583 > 0:
-        Metal = OII3727/(Halpha + NII6583)
-    elif OII3725 > 0 and Halpha > 0 and NII6583 > 0:
-        Metal = OII3725/(Halpha + NII6583)
-    else:
-        Metal = -999
-    '''
-    return ID, OIII_Hbeta, OIII_Hbeta_err, NII_halpha, NII_halpha_err, SII_ratio, SII_ratio_err, OIII_OII, OIII_OII_err, Temp
+    
+    return ID, OIII_Hbeta, OIII_Hbeta_err, NII_halpha, NII_halpha_err, SII_ratio, SII_ratio_err, OIII_OII, OIII_OII_err, Temp, He_3889_6678,He_7065_6678
 
 #Lists that will hold the Emission Line Ratios
 gal_ID = []
@@ -2978,8 +2915,8 @@ ratio_OIII_hbeta = []
 ratio_OIII_hbeta_err = []
 ratio_NII_halpha = []
 ratio_NII_halpha_err = []
-#He_7065_6678 = []
-#He_3889_6678 = []
+He_7065_6678 = []
+He_3889_6678 = []
 SII_6716_6730 = []
 SII_6716_6730_err = []
 #OIII_5007_3725 = []
@@ -2999,7 +2936,7 @@ for i in finaltable:
 
     #here HeI_1 is the ratio HeI 7065/6678 HeI_2 is the ratio HeI 3889/6678
     #SII is the SII ratio between 6716 and 6730
-    ID, OIII_Hbeta, OIII_Hbeta_err, NII_halpha, NII_halpha_err, SII_ratio, SII_ratio_err, OIII_OII, OIII_OII_err, Temp = line_ratio_analysis(i)
+    ID, OIII_Hbeta, OIII_Hbeta_err, NII_halpha, NII_halpha_err, SII_ratio, SII_ratio_err, OIII_OII, OIII_OII_err, Temp, He1, He2 = line_ratio_analysis(i)
 
     gal_ID.append(ID)
     ratio_OIII_hbeta.append(OIII_Hbeta)
@@ -3007,8 +2944,8 @@ for i in finaltable:
     ratio_NII_halpha.append(NII_halpha)
     ratio_NII_halpha_err.append(NII_halpha_err)
 
-    #He_7065_6678.append(ratio[2])
-    #He_3889_6678.append(ratio[3])
+    He_7065_6678.append(He2)
+    He_3889_6678.append(He1)
     SII_6716_6730.append(SII_ratio)
     SII_6716_6730_err.append(SII_ratio_err)
     # OIII_5007_3725.append(ratio[5])
@@ -3017,7 +2954,7 @@ for i in finaltable:
     Temperature.append(Temp)
     #R32.append(ratio[8])
     #Metallicity.append(ratio[9])
-    print()
+    #print()
 
 
 
@@ -3032,8 +2969,8 @@ ratio_table['OIII5007/Hbeta'] = np.array(ratio_OIII_hbeta)
 ratio_table['OIII5007/Hbeta err'] = np.array(ratio_OIII_hbeta_err)
 ratio_table['NII6583/Halpha'] = np.array(ratio_NII_halpha)
 ratio_table['NII6583/Halpha err'] = np.array(ratio_NII_halpha_err)
-#ratio_table['HeI 7065/6678'] = np.array(He_7065_6678)
-#ratio_table['HeI 3889/6678'] = np.array(He_3889_6678)
+ratio_table['HeI 7065/6678'] = np.array(He_7065_6678)
+ratio_table['HeI 3889/6678'] = np.array(He_3889_6678)
 ratio_table['SII 6716/6730'] = np.array(SII_6716_6730)
 ratio_table['SII 6716/6730 err'] = np.array(SII_6716_6730_err)
 #ratio_table['OIII5007/OII3725'] = np.array(OIII_5007_3725)
@@ -3043,10 +2980,12 @@ ratio_table['Temperature'] = np.array(Temperature)
 #ratio_table['R32'] = np.array(R32)
 #ratio_table['Metallicity'] = np.array(Metallicity)
 
-print(ratio_table)
+#print(ratio_table['HeI 7065/6678'])
+#print(ratio_table['HeI 3889/6678'])
 
-plotting_BPT(ratio_table)
+#plotting_BPT(ratio_table)
 
+ratio_table.write('ratio_table.fits', format='ascii.fixed_width_two_line')
 end = time.time()
 
 print('Time of Program = ' + str(round((end-start)/60, 2)) + ' minutes!')
