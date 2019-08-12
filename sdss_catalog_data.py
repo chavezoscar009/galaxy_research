@@ -57,7 +57,7 @@ def Halpha_vals(table2, filt):
 
     #getting Halpha line measurements
     Halpha = table2['H_ALPHA_FLUX'][filt]
-    Halpha_err = table2['H_ALPHA_FLUX'][filt]
+    Halpha_err = table2['H_ALPHA_FLUX_err'][filt]
     Halpha_EW = table2['H_ALPHA_EQW'][filt]
     Halpha_EW_ERR = table2['H_ALPHA_EQW_ERR'][filt]
 
@@ -76,10 +76,12 @@ def NII_vals(table2, filt):
 def OII_vals(table2, filt):
 
     #getting NII line measurements
-    NII6584 = table2['NII_6584_FLUX'][filt]
-    NII6584_err = table2['NII_6584_FLUX_err'][filt]
-    NII6584_EW = table2['NII_6584_EQW'][filt]
-    NII6584_EW_ERR = table2['NII_6584_EQW_ERR'][filt]
+    OII3726 = table2['OII_3726_FLUX'][filt]
+    OII3726_err = table2['OII_3726_FLUX_err'][filt]
+    OII3729 = table2['OII_3729_FLUX'][filt]
+    OII3729_err = table2['OII_3729_FLUX_ERR'][filt]
+    
+    return OII3726, OII3726_err, OII3729, OII3729_err
 
 def bad_data_filt(OIII5007, OIII5007_err ,Hbeta, Halpha, Halpha_err, NII6584):
 
@@ -97,29 +99,6 @@ def bad_data_filt(OIII5007, OIII5007_err ,Hbeta, Halpha, Halpha_err, NII6584):
 
     return filt
 
-
-
-
-
-'''
-for i in range(len(Hbeta)):
-
-    if OIII5007[i] < 0 or Hbeta[i] < 0 or Halpha[i] < 0 or NII6584[i] < 0:
-        bad_values_filt[i] = False
-
-    if OIII5007[i] ==  0 or Hbeta[i] == 0 or Halpha[i] == 0 or NII6584[i] ==  0:
-        bad_values_filt[i] = False
-
-    if OIII5007_err[i] < 0 or Halpha_err[i] < 0:
-        bad_values_filt[i] = False
-
-    if OIII5007[i]/OIII5007_err[i] < 5 or Halpha[i]/Halpha_err[i] < 5:
-        bad_values_filt[i] = False
-'''
-#OIII_Hbeta = OIII5007[bad_values_filt]/Hbeta[bad_values_filt]
-#NII_halpha = NII6584[bad_values_filt]/Halpha[bad_values_filt]
-
-
 specObjID, spec_z = gal_info('galSpecInfo-dr8.fits')
 filt = z_filtered(spec_z)
 table = gal_line_info('galSpecLine-dr8.fits')
@@ -128,6 +107,8 @@ OIII5007, OIII5007_err, OIII5007_EW, OIII5007_EW_ERR = OIII_vals(table, filt)
 Hbeta, Hbeta_err, Hbeta_EW, Hbeta_EW_ERR = Hbeta_vals(table, filt)
 Halpha, Halpha_err, Halpha_EW, Halpha_EW_ERR = Halpha_vals(table, filt)
 NII6584, NII6584_err, NII6584_EW, NII6584_EW_ERR = NII_vals(table, filt)
+OII3726, OII3726_err, OII3729, OII3729_err = OII_vals(table, filt)
+
 
 bad_data_filter =  bad_data_filt(OIII5007, OIII5007_err ,Hbeta, Halpha, Halpha_err, NII6584)
 
@@ -148,28 +129,28 @@ Hbeta_line, Hbeta_line_err, Hbeta_line_EW, Hbeta_line_EW_ERR = line_filter(Hbeta
 Halpha_line, Halpha_line_err, Halpha_line_EW, Halpha_line_EW_ERR = line_filter(Halpha, Halpha_err, Halpha_EW, Halpha_EW_ERR, bad_data_filter)
 NII6584_line, NII6584_line_err, NII6584_line_EW, NII6584_line_EW_ERR  = line_filter(NII6584, NII6584_err, NII6584_EW, NII6584_EW_ERR, bad_data_filter)
 
-def low_SN(OIII5007_line, OIII5007_line_err, Halpha_line, Halpha_line_err):
+def low_SN(Halpha_line, Halpha_line_err):
 
-    filt = np.ones(len(OIII5007_line), dtype = bool)
+    filt = np.ones(len(Halpha_line), dtype = bool)
 
-    for i in range(len(OIII5007_line)):
-        if OIII5007_line[i]/OIII5007_line_err[i] < 5 or Halpha_line[i]/Halpha_line_err[i] < 5:
+    for i in range(len(Halpha_line)):
+        if Halpha_line[i]/Halpha_line_err[i] < 3:
             filt[i] = False
     return filt
 
-SN_filt = low_SN(OIII5007_line, OIII5007_line_err, Halpha_line, Halpha_line_err)
+SN_filt = low_SN(Halpha_line, Halpha_line_err)
 #plt.figure()
 #plt.title('BPT Diagram')
 #plt.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4)
 #plt.show()
 
-OIII_Hbeta = OIII5007_line/Hbeta_line
-NII_halpha = NII6584_line/Halpha_line
+OIII_Hbeta = OIII5007_line[SN_filt]/Hbeta_line[SN_filt]
+NII_halpha = NII6584_line[SN_filt]/Halpha_line[SN_filt]
 
 def SFR_galaxies():
 
     def SFR(x):
-        return .61/(x - .47) + 1.19
+        return .61/(np.log10(x) - .05) + 1.3
 
     log_OIII_hbeta = np.log10(OIII_hbeta)
     log_NII_halpha = np.log10(NII_halpha)
@@ -233,25 +214,32 @@ def plotting_BPT(table):
     filt3[ind3] = False
 
     #plotting the BPT diagram
-    fig, (ax1, ax2) = plt.subplots(2, 1)
-    ax1.title('BPT Diagram')
-    ax1.xlabel(r'$log(\frac{[NII]6854}{H\alpha}) $ ', fontsize = 15)
-    ax1.ylabel(r'$log(\frac{[OIII]5007}{H\beta}) $ ', fontsize = 15)
-    ax1.xlim(-2, 1.5)
-    ax1.ylim(-1.5, 2)
+    fig, ax1 = plt.subplots(1, 1)
+    ax1.set_title('BPT Diagram', fontsize = 30, weight = 'bold')
+    ax1.set_xlabel(r'$log(\frac{[NII]6854}{H\alpha}) $ ', fontsize = 30)
+    ax1.set_ylabel(r'$log(\frac{[OIII]5007}{H\beta}) $ ', fontsize = 30)
+    ax1.set_xlim(-2, 1.5)
+    ax1.set_ylim(-1.5, 2)
 
-    ax1.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4)
-    line1, = plt.plot(np.log10(x)[filt1], y[filt1], 'k--', label = 'Kewley 2003',  linewidth = 1)
-    line2, = plt.plot(np.log10(x)[filt3], y_new[filt3], 'y--', label = 'Kewley 2013',linewidth = 1)
-    line3, = plt.plot(np.log10(x)[filt2], y_agn[filt2], 'b--', label = 'Kauffmann')
+    sdss, = ax1.plot(np.log10(NII_halpha), np.log10(OIII_Hbeta), '.', alpha = .4, markersize = .07, label = 'SDSS Galaxies')
+    line1, = ax1.plot(np.log10(x)[filt1], y[filt1], 'k--', label = 'Kewley 2003',  linewidth = 3)
+    line2, = ax1.plot(np.log10(x)[filt3], y_new[filt3], 'y--', label = 'Kewley 2013',linewidth = 3)
+    line3, = ax1.plot(np.log10(x)[filt2], y_agn[filt2], 'b--', label = 'Kauffmann', linewidth=3)
 
 
+    
     for i in range(len(OIII_HB)):
-        ax1.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', markersize=15 ,label = obj[i])
-
-    #plt.legend(handles = [line1, line2, line3], loc = 'upper right', frameon=False)
-    ax1.legend(loc = 'lower right', frameon=False)
-    #plt.savefig('BPT_Diagram.eps', format=eps)
+        if i == 0:
+            gal, = ax1.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', color='red', markersize=15 ,label = 'This Work')
+        else:
+            ax1.plot(np.log10(NII_HA[i]), np.log10(OIII_HB[i]), '*', color='red', markersize=15)
+            
+    
+    legend1 = ax1.legend(handles=[line1, line2, line3], prop={'size': 8}, loc='upper left', frameon=False)
+    ax = ax1.add_artist(legend1)
+    legend2 = ax1.legend(handles = [sdss], loc = 'lower right', frameon=False, prop={'size': 7}, markerscale=100, bbox_to_anchor=(0.95, 0.08, .05, .1))
+    a = ax1.add_artist(legend2)
+    ax1.legend(handles = [gal], loc = 'lower right', frameon=False, prop={'size': 8},)                     
     plt.show()
 
 '''
